@@ -1,5 +1,6 @@
 import { newGame, loadGame, saveGame, hasSave, clearSave, SAVE_VERSION } from '../src/game/create';
 import { callOff, jobBlocked, planJob } from '../src/game/crew';
+import { resolveHijinx } from '../src/game/hijinx';
 import { forecastInspection, scheduleInspection } from '../src/game/inspect';
 import { LAYOUT, idx } from '../src/game/layout';
 import { suspicionDecay } from '../src/game/ops';
@@ -37,7 +38,7 @@ function near(name: string, got: number, expected: number) {
 }
 
 function game(seed = 1): GameState {
-  const s = newGame('Ada', 'normal', seed);
+  const s = newGame({ name: 'Ada' }, 'normal', seed);
   s.modals = [];
   return s;
 }
@@ -197,7 +198,7 @@ function moving() {
 
 function saves() {
   store.clear();
-  const s = newGame('Ada', 'hard', 42);
+  const s = newGame({ name: 'Ada' }, 'hard', 42);
   s.modals = [];
   placeObject(s, 'deck', 10, 3);
   placeObject(s, 'sleeping_bag', 10, 3);
@@ -230,6 +231,36 @@ function saves() {
   check('clear removes the save', !hasSave() && loadGame() === null);
 }
 
+function atSixAM(s: GameState) {
+  s.time = 1799.9;
+  s.lastDay = 0;
+  tick(s, 0.2);
+}
+
+function hijinx() {
+  const pet = game();
+  pet.flags.ferret = 1;
+  pet.food = 0;
+  tick(pet, 1);
+  check('Bandit moves into the ceiling', !!pet.pet && pet.pet.layer === 1);
+  atSixAM(pet);
+  check('Bandit brings home 1 food in the morning', pet.food === 1, `food ${pet.food}`);
+
+  const hung = game();
+  placeObject(hung, 'deck', 10, 3);
+  resolveHijinx(hung, 'hotdog', 2, hung.crew[0].id);
+  check('hanging the hot dog puts it on the plywood', hung.objects.some((o) => o.type === 'hotdog' && o.x === 10 && o.y === 3));
+
+  const worn = game();
+  placeObject(worn, 'deck', 10, 3);
+  const bat = worn.crew[0];
+  resolveHijinx(worn, 'hotdog', 0, bat.id);
+  check('wearing the hot dog suit is a costume', bat.costume?.id === 'hotdog');
+  bat.costume!.until = 0;
+  atSixAM(worn);
+  check('a worn-out suit ends up hanging in the ceiling', !bat.costume && worn.objects.some((o) => o.type === 'hotdog'));
+}
+
 function determinism() {
   const play = (seed: number) => {
     const s = game(seed);
@@ -251,6 +282,7 @@ shifts();
 stores();
 moving();
 saves();
+hijinx();
 determinism();
 
 if (failed) {

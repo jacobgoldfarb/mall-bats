@@ -1,4 +1,4 @@
-import type { BuildId, JobId, TraitId } from './defs';
+import type { BuildId, CostumeId, JobId, TraitId } from './defs';
 
 export interface Look {
   skin: string;
@@ -39,6 +39,8 @@ export interface Carry {
 export interface Crew extends Agent {
   name: string;
   archetype: string;
+  sprite?: string;
+  costume?: { id: CostumeId; until: number };
   title: string;
   bio: string;
   stealth: number;
@@ -172,6 +174,15 @@ export interface Candidate {
   traits: TraitId[];
   bio: string;
   look: Look;
+  sprite?: string;
+}
+
+export type Mover = Omit<Agent, 'id' | 'look' | 'bubble'>;
+
+export interface Pet extends Mover {
+  name: string;
+  napping: boolean;
+  timer: number;
 }
 
 export interface Visitor {
@@ -232,6 +243,7 @@ export interface GameState {
   deck: number[];
   objects: Placed[];
   crew: Crew[];
+  pet?: Pet;
   npcs: Npc[];
   cameras: Camera[];
   inspections: Inspection[];

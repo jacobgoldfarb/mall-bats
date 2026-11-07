@@ -5,6 +5,7 @@ import {
   SUSPICION_LEVELS,
   BUILD,
   BUILDS,
+  COSTUMES,
   JOB,
   KIOSK_LEVEL,
   LEVELS,
@@ -245,7 +246,7 @@ export function BuildPanel({ s }: { s: GameState }) {
       </div>
     );
   }
-  const items = BUILDS.filter((b) => b.category === app.buildCategory).sort((a, b) => a.level - b.level);
+  const items = BUILDS.filter((b) => b.category === app.buildCategory && !b.gift).sort((a, b) => a.level - b.level);
   return (
     <div class="buildpanel panel">
       <div class="panel-head">
@@ -485,7 +486,7 @@ export function CrewPanel({ s }: { s: GameState }) {
       </div>
       {s.ladder.map((v) => (
         <button class="ladder-row" onClick={() => (showVisitor(s, v), refresh())} title="Someone is waiting at the ladder.">
-          <Portrait look={v.candidate.look} sprite={crewSprite(v.candidate.archetype)} size={22} />
+          <Portrait look={v.candidate.look} sprite={crewSprite(v.candidate)} size={22} />
           <span>
             {v.candidate.name} is waiting at the ladder · until {formatDate(dayOf(v.until))}
           </span>
@@ -539,6 +540,16 @@ function awayText(s: GameState, c: Crew): string {
   return `In county until ${formatDate(dayOf(c.awayUntil))}`;
 }
 
+function CostumeChip({ s, costume }: { s: GameState; costume: NonNullable<Crew['costume']> }) {
+  const def = COSTUMES[costume.id];
+  const days = Math.max(1, Math.ceil((costume.until - s.time) / 1440));
+  return (
+    <i class="trait good" title={def.desc}>
+      {def.name} · {days}d
+    </i>
+  );
+}
+
 function CrewCard({ s, c, expanded }: { s: GameState; c: Crew; expanded: boolean }) {
   const away = c.state === 'away';
   const where = away ? awayText(s, c) : c.layer === 0 ? 'In the mall' : 'In the ceiling';
@@ -554,7 +565,7 @@ function CrewCard({ s, c, expanded }: { s: GameState; c: Crew; expanded: boolean
       }}
     >
       <div class="crew-top">
-        <Portrait look={c.look} sprite={crewSprite(c.archetype)} size={40} bg={c.layer === 0 ? '#3a1a2a' : '#1a2040'} />
+        <Portrait look={c.look} sprite={crewSprite(c)} size={40} bg={c.layer === 0 ? '#3a1a2a' : '#1a2040'} />
         <div class="crew-id">
           <div class="crew-name">
             {c.name} <small>{c.title}</small>
@@ -588,8 +599,9 @@ function CrewCard({ s, c, expanded }: { s: GameState; c: Crew; expanded: boolean
               HANDY <Dots n={c.handy} color="#ffc93e" bonus={moodStatBonus(s, c, 'handy')} />
             </span>
           </div>
-          {c.traits.length > 0 && (
+          {(c.traits.length > 0 || c.costume) && (
             <div class="traits">
+              {c.costume && <CostumeChip s={s} costume={c.costume} />}
               {c.traits.map((t) => (
                 <i class={`trait ${TRAITS[t].good ? 'good' : 'bad'}`} title={TRAITS[t].desc}>
                   {TRAITS[t].name}
@@ -868,6 +880,7 @@ export function Tooltip({ s }: { s: GameState }) {
   const d = getDerived(s);
   const obj = d.objAt.get(idx(h.x, h.y));
   const ck = LAYOUT.ceilingKind[idx(h.x, h.y)];
+  const pet = app.view.layer === 1 && s.flags.ferret && s.pet && Math.floor(s.pet.x) === h.x && Math.floor(s.pet.y) === h.y ? s.pet : null;
   const lines: string[] = [];
   if (app.view.layer === 1) {
     if (ck === C_DUCT) lines.push('HVAC duct: cannot build');
@@ -924,6 +937,11 @@ export function Tooltip({ s }: { s: GameState }) {
           <b>{BUILD[obj.type].name}</b> {BUILD[obj.type].power ? obj.powered ? <span class="good">· powered</span> : <span class="bad">· no power</span> : ''}
           {BUILD[obj.type].supply ? ` · ${obj.supplyLoad}/${BUILD[obj.type].supply}W` : ''}
           {obj.type === 'pc' ? ` · Wi-Fi ${Math.round(wifiAt(s, obj.x, obj.y) * 100)}%` : ''}
+        </div>
+      )}
+      {pet && (
+        <div class="tt-line">
+          <b>Bandit</b> {pet.napping ? 'is asleep in a Pringles can.' : 'brings home a snack every morning.'}
         </div>
       )}
     </div>
@@ -1042,7 +1060,7 @@ export function ModalView({ s }: { s: GameState }) {
       <div class="modal panel">
         <div class={`modal-art art-${m.art ?? 'none'}`}>
           {m.art === 'recruit' && visitor ? (
-            <Portrait look={visitor.look} sprite={crewSprite(visitor.archetype)} size={96} bg="#48298a" />
+            <Portrait look={visitor.look} sprite={crewSprite(visitor)} size={96} bg="#48298a" />
           ) : (
             <Icon name={`art.${ART.has(m.art ?? '') ? m.art : 'pager'}`} size={128} />
           )}

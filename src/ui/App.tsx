@@ -2,10 +2,12 @@ import { useEffect, useState } from 'preact/hooks';
 import { app, refresh, subscribe } from '../app';
 import { audio } from '../audio/audio';
 import { clearSave, hasSave, loadGame, newGame, saveGame } from '../game/create';
+import { PLAYER_BODIES } from '../game/defs';
 import { ACHIEVEMENTS } from '../game/ops';
 import type { Difficulty, GameState } from '../game/state';
 import { LAYOUT } from '../game/layout';
 import { Icon } from './icons';
+import { Portrait } from './widgets';
 import { JobsMenu } from './jobs';
 import { BottomBar, BuildPanel, CrewPanel, GameOver, InspectionPanel, LevelUpBanner, LogPanel, ModalView, ObjectiveCard, SelectedObject, Toasts, Tooltip, TopBar } from './hud';
 
@@ -149,9 +151,16 @@ function Title() {
   );
 }
 
+type PlayerBody = (typeof PLAYER_BODIES)[number];
+
 function NewGame() {
-  const [name, setName] = useState('Jace');
+  const [body, setBody] = useState<PlayerBody>(PLAYER_BODIES[0]);
+  const [name, setName] = useState<string>(body.name);
   const [diff, setDiff] = useState<Difficulty>('normal');
+  const pickBody = (next: PlayerBody) => {
+    if (PLAYER_BODIES.some((b) => b.name === name.trim())) setName(next.name);
+    setBody(next);
+  };
   const diffs: { id: Difficulty; name: string; desc: string }[] = [
     { id: 'easy', name: 'Window Shopper', desc: 'Lazier guards, cheaper auction, forgiving suspicion.' },
     { id: 'normal', name: 'Squatter', desc: 'The intended experience.' },
@@ -161,10 +170,19 @@ function NewGame() {
     <div class="modal-wrap">
       <div class="modal panel newgame">
         <h2>Who are you?</h2>
-        <label class="field">
-          <span>Your name</span>
-          <input value={name} maxLength={14} onInput={(e) => setName((e.target as HTMLInputElement).value)} />
-        </label>
+        <div class="who">
+          <div class="bodies">
+            {PLAYER_BODIES.map((b) => (
+              <button class={`body ${body.id === b.id ? 'on' : ''}`} onClick={() => pickBody(b)} title={b.name}>
+                <Portrait sprite={b.sprite} size={58} bg={body.id === b.id ? '#8a2a6a' : '#2a1d3a'} />
+              </button>
+            ))}
+          </div>
+          <label class="field">
+            <span>Your name</span>
+            <input value={name} maxLength={14} onInput={(e) => setName((e.target as HTMLInputElement).value)} />
+          </label>
+        </div>
         <div class="diffs">
           {diffs.map((d) => (
             <button class={`diff ${diff === d.id ? 'on' : ''}`} onClick={() => setDiff(d.id)}>
@@ -178,7 +196,7 @@ function NewGame() {
             class="btn big"
             onClick={() => {
               clearSave();
-              startGame(newGame(name.trim() || 'Jace', diff));
+              startGame(newGame({ name: name.trim() || body.name, sprite: body.sprite }, diff));
             }}
           >
             Find the ladder

@@ -13,7 +13,7 @@ import type { Difficulty } from '../src/game/state';
 const difficulty = (process.argv[2] ?? 'normal') as Difficulty;
 const seed = Number(process.argv[3] ?? 7);
 const verbose = process.argv.includes('-v');
-const s = newGame('Jace', difficulty, seed);
+const s = newGame({ name: 'Jace' }, difficulty, seed);
 
 const deckPlan: [number, number][] = [];
 for (let x = 8; x <= 40; x++) deckPlan.push([x, 2], [x, 3]);

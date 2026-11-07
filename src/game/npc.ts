@@ -1,6 +1,6 @@
 import { BUILD, JOB } from './defs';
 import { stat } from './needs';
-import { agentNode, crewCaught, currentJob, goTo, has, heatDetectMult, heatTick, lookoutMult, makeLook, moveAgent, spottedHeat, startFlee } from './crew';
+import { agentNode, costumeOf, crewCaught, currentJob, goTo, has, heatDetectMult, heatTick, lookoutMult, makeLook, moveAgent, spottedHeat, startFlee } from './crew';
 import { E_STAFF, H, LAYOUT, N, W, edgeBetween, idx, inBounds, type Waypoint } from './layout';
 import { suspicionLevel, log, notify, rand, raiseSuspicion, sfx } from './ops';
 import type { Crew, GameState, Npc, NpcKind, Placed } from './state';
@@ -198,6 +198,11 @@ function guardHear(s: GameState, n: Npc, noise: Float32Array) {
   log(s, `${n.name} stopped under ${LAYOUT.rooms[ri]?.name ?? 'the ceiling'}: "...did that ceiling just creak?"`, 'warn', { x: Math.floor(n.x), y: Math.floor(n.y), layer: 0 });
 }
 
+const SECURITY_DESK = { x: 33, y: 1 };
+const NAP_HURRY = 1.5;
+
+const garyNapping = (s: GameState) => (s.flags.garyNapFrom ?? 0) <= s.time && s.time < (s.flags.garyAsleepUntil ?? 0);
+
 function updateGuard(s: GameState, n: Npc, dt: number, noise: Float32Array) {
   const phase = phaseAt(s.time);
   if (n.kind === 'guard' && (phase === 'morning' || phase === 'open') && n.state !== 'offduty') {
@@ -208,9 +213,16 @@ function updateGuard(s: GameState, n: Npc, dt: number, noise: Float32Array) {
     n.state = 'offduty';
     goTo(s, n, [nodeOf(0, 33, 1)], ACCESS_STAFF);
   }
+  if (n.isGary && garyNapping(s) && (n.state === 'patrol' || n.state === 'wait')) {
+    n.state = 'toNap';
+    goTo(s, n, [nodeOf(0, SECURITY_DESK.x, SECURITY_DESK.y)], ACCESS_STAFF);
+  }
   switch (n.state) {
     case 'offduty':
       if (moveAgent(n, n.speed, dt)) n.state = 'gone';
+      return;
+    case 'toNap':
+      if (moveAgent(n, n.speed * NAP_HURRY, dt)) n.state = 'asleep';
       return;
     case 'asleep':
       moveAgent(n, n.speed, dt);
@@ -537,7 +549,8 @@ export function detection(s: GameState, dt: number) {
       (d.periscopeAt[idx(Math.floor(c.x), Math.floor(c.y))] ? periscope : 1) *
       teamRoutes *
       diff *
-      heatDetectMult(c);
+      heatDetectMult(c) *
+      (costumeOf(c)?.nightDetect ?? 1);
     for (const n of s.npcs) {
       if (n.kind !== 'guard' && n.kind !== 'janitor') continue;
       if (n.state === 'asleep' || n.state === 'offduty') continue;
@@ -634,9 +647,9 @@ export function ensureStaff(s: GameState) {
   if (nightShift) {
     const garyName = s.gary.replaced ? 'Officer Kowalski' : 'Gary';
     if (!guards.some((g) => g.route === 0)) {
-      const g = spawnNpc(s, 'guard', 33, 1, { name: garyName, isGary: !s.gary.replaced, route: 0, routeI: 0, state: 'patrol' });
+      const g = spawnNpc(s, 'guard', SECURITY_DESK.x, SECURITY_DESK.y, { name: garyName, isGary: !s.gary.replaced, route: 0, routeI: 0, state: 'patrol' });
       g.dog = lvl >= 3;
-      if ((s.flags.garyAsleepUntil ?? 0) > s.time) g.state = 'asleep';
+      if (g.isGary && garyNapping(s)) g.state = 'asleep';
     }
     const wantSecond = lvl >= 2 || (s.flags.traineeNight ?? -1) === dayOf(s.time - 360);
     if (wantSecond && !guards.some((g) => g.route === 1)) spawnNpc(s, 'guard', 33, 1, { name: lvl >= 2 ? 'Officer Reyes' : 'Trainee Kyle', route: 1, routeI: 0, state: 'patrol' });

@@ -152,7 +152,7 @@ function CrewTray({ s, crew, selected, shift }: { s: GameState; crew: Crew[]; se
               onDragEnd={() => ((draggedCrew = null), refresh())}
               onClick={() => ((app.jobsCrew = selected === c ? null : c.id), audio.play('click'), refresh())}
             >
-              <Portrait look={c.look} sprite={crewSprite(c.archetype)} size={32} bg={c.layer === 0 ? '#3a1a2a' : '#1a2040'} />
+              <Portrait look={c.look} sprite={crewSprite(c)} size={32} bg={c.layer === 0 ? '#3a1a2a' : '#1a2040'} />
               <div class="chip-body">
                 <b>{c.name}</b>
                 <small>
@@ -227,7 +227,7 @@ function StaffCard({ s, def, crew, selected, shift }: { s: GameState; def: JobDe
             onClick={(ev) => (ev.stopPropagation(), setJob(c, shift, 'rest'))}
             title={`Click to send ${c.name} back to rest.`}
           >
-            <Portrait look={c.look} sprite={crewSprite(c.archetype)} size={22} />
+            <Portrait look={c.look} sprite={crewSprite(c)} size={22} />
             <span>{c.name}</span>
           </button>
         ))}

@@ -140,9 +140,10 @@ export function drawPortrait(ctx: Ctx, s: CharacterSprite, size: number) {
   ctx.drawImage(s.img, s.frame / 2 - crop / 2, Math.max(0, s.footY - 46), crop, crop, 0, size * 0.12, size, size);
 }
 
-export function drawCharacterFrame(ctx: Ctx, s: CharacterSprite, px: number, py: number, dir: number, col: number) {
+export function drawCharacterFrame(ctx: Ctx, s: CharacterSprite, px: number, py: number, dir: number, col: number, scale = 1) {
   const f = s.frame;
-  ctx.drawImage(s.img, col * f, dir * f, f, f, Math.round(px - f / 2), Math.round(py - s.footY), f, f);
+  const size = Math.round(f * scale);
+  ctx.drawImage(s.img, col * f, dir * f, f, f, Math.round(px - size / 2), Math.round(py - s.footY * scale), size, size);
 }
 
 export function texture(id: string) {
