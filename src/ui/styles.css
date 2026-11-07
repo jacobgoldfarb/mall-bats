@@ -1,3 +1,19 @@
+@font-face {
+  font-family: 'Pixelify Bats';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url(../assets/fonts/pixelify-bats-400.woff2) format('woff2');
+}
+
+@font-face {
+  font-family: 'Pixelify Bats';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url(../assets/fonts/pixelify-bats-600.woff2) format('woff2');
+}
+
 :root {
   --ink: #0d0a12;
   --plum-0: #1b1622;
@@ -29,8 +45,8 @@
   --neon: #2bfff0;
   --bad: var(--red-hi);
 
-  --body: 'Pixelify Sans', 'Trebuchet MS', sans-serif;
-  --display: 'Jersey 10', 'Pixelify Sans', sans-serif;
+  --body: 'Pixelify Bats', 'Trebuchet MS', sans-serif;
+  --display: 'Jersey 10', 'Pixelify Bats', sans-serif;
   --label: 'VT323', 'Courier New', monospace;
   --led: 'VT323', 'Courier New', monospace;
 
@@ -582,6 +598,40 @@ button {
 
 .gary-row .bar {
   grid-column: 1 / -1;
+}
+
+.ladder-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  border-top: 2px solid var(--plum-0);
+  background: rgba(220, 52, 140, 0.12);
+  color: var(--pink-4);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ladder-row:hover {
+  background: rgba(220, 52, 140, 0.24);
+}
+
+.grade {
+  margin: -4px 0 8px;
+  font-family: var(--label);
+  font-size: 18px;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.grade b {
+  font-family: var(--display);
+  font-size: 28px;
+  color: var(--cream);
 }
 
 .level-list {
@@ -1892,25 +1942,8 @@ button {
   color: var(--muted);
 }
 
-.insp-sus {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 6px;
-  margin: 4px 0;
-}
-
-.sus-track {
-  position: relative;
-  height: 8px;
-  background: var(--ink);
-  box-shadow: inset 0 0 0 1px var(--plum-3);
-}
-
-.sus-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--teal-2), var(--gold) 55%, var(--red-hi) 85%);
-  background-size: 382px 100%;
+.insp .btn {
+  margin-top: 4px;
 }
 
 .objective {

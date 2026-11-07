@@ -1,10 +1,11 @@
 import { newGame, loadGame, saveGame, hasSave, clearSave, SAVE_VERSION } from '../src/game/create';
-import { jobBlocked } from '../src/game/crew';
-import { forecastInspection } from '../src/game/inspect';
-import { idx } from '../src/game/layout';
+import { callOff, jobBlocked, planJob } from '../src/game/crew';
+import { forecastInspection, scheduleInspection } from '../src/game/inspect';
+import { LAYOUT, idx } from '../src/game/layout';
 import { suspicionDecay } from '../src/game/ops';
-import { demolishAt, placeObject, tick } from '../src/game/sim';
+import { buildCost, demolishAt, moveObject, placeObject, tick } from '../src/game/sim';
 import type { GameState, Inspection } from '../src/game/state';
+import { dayOf } from '../src/game/time';
 
 const store = new Map<string, string>();
 Object.assign(globalThis, {
@@ -104,7 +105,15 @@ function inspections() {
   placeObject(home, 'sleeping_bag', 10, 3);
   const stashed = forecastInspection(home, inspectionAt(home, 'complaint'));
   check('a Bat at home stashes a portable', stashed.verdict === 'search' && stashed.crewHome && stashed.stashed.length === 1 && stashed.confiscated.length === 0 && stashed.deckTiles.length === 0 && stashed.value === 0);
-  near('complaint scrutiny starts at 0.25', stashed.scrutiny, 0.25);
+
+  const carry = game();
+  carry.cash = 1000;
+  placeObject(carry, 'deck', 10, 3);
+  placeObject(carry, 'deck', 11, 3);
+  placeObject(carry, 'futon', 10, 3);
+  placeObject(carry, 'tv', 11, 3);
+  const carried = forecastInspection(carry, { ...inspectionAt(carry, 'complaint'), radius: 2 });
+  check('one Bat at home carries the priciest big item out', carried.stashed.map((o) => o.type).join() === 'tv' && carried.confiscated.map((o) => o.type).join() === 'futon');
 
   home.crew[0].layer = 0;
   const caught = forecastInspection(home, inspectionAt(home, 'complaint'));
@@ -115,6 +124,75 @@ function inspections() {
   placeObject(decoy, 'raccoon', 10, 3);
   check('a complaint blames the raccoon', forecastInspection(decoy, inspectionAt(decoy, 'complaint')).verdict === 'raccoon');
   check('the fire marshal ignores the raccoon', forecastInspection(decoy, inspectionAt(decoy, 'fire')).verdict === 'search');
+}
+
+function decoys() {
+  const s = game();
+  const room = LAYOUT.roomAt[idx(10, 3)];
+  near('a first raccoon costs $25', buildCost(s, 'raccoon', 10, 3), 25);
+  s.rooms[room].decoys = 1;
+  near('a second raccoon above the same store costs $40', buildCost(s, 'raccoon', 10, 3), 40);
+  near('other stores still pay $25', buildCost(s, 'raccoon', 30, 6), 25);
+}
+
+function queue() {
+  const s = game();
+  s.time = 2 * 1440 + 12 * 60;
+  const a = scheduleInspection(s, LAYOUT.roomIndex['corridor'], 'complaint', 'a');
+  const b = scheduleInspection(s, LAYOUT.roomIndex['hotspot'], 'power', 'b');
+  check('two inspections land on different mornings', !!a && !!b && dayOf(b.at) === dayOf(a.at) + 1);
+}
+
+function shifts() {
+  const s = game();
+  s.time = 23 * 60;
+  const bat = s.crew[0];
+  bat.nightJob = 'fountain';
+  s.pools.fountain = 0;
+  check('a picked-clean job means rest', planJob(s, bat) === 'rest');
+  s.pools.fountain = 60;
+  check('the main job wins when it has coins', planJob(s, bat) === 'fountain');
+  callOff(s, bat);
+  check('calling a Bat off rests them for the shift', planJob(s, bat) === 'rest' && bat.nightJob === 'fountain');
+  s.time += 1440;
+  check('the call-off ends with the shift', planJob(s, bat) === 'fountain');
+  bat.energy = 5;
+  check('an exhausted Bat refuses work', planJob(s, bat) === 'rest');
+}
+
+function reportAt(s: GameState, room: number) {
+  s.rooms[room].complaint = 101;
+  tick(s, 1);
+}
+
+function stores() {
+  const s = game();
+  s.time = 3 * 1440 + 12 * 60;
+  s.lastDay = dayOf(s.time - 360);
+  const room = LAYOUT.roomIndex['hotspot'];
+  const before = s.mallHealth;
+  for (let k = 0; k < 3; k++) reportAt(s, room);
+  check('three reports leave the store open', !s.rooms[room].vacant && s.rooms[room].strain >= 2.9);
+  reportAt(s, room);
+  check('a fourth report breaks the lease', s.rooms[room].vacant && s.mallHealth < before);
+
+  const lockdown = game();
+  lockdown.time = s.time;
+  lockdown.lastDay = s.lastDay;
+  lockdown.suspicion = 85;
+  reportAt(lockdown, LAYOUT.roomIndex['ebgamez']);
+  check('a store report in Lockdown brings a police sweep', lockdown.inspections.some((i) => i.kind === 'sweep'));
+}
+
+function moving() {
+  const s = game();
+  placeObject(s, 'deck', 10, 3);
+  placeObject(s, 'deck', 11, 3);
+  placeObject(s, 'sleeping_bag', 10, 3);
+  const bag = s.objects[0];
+  const cash = s.cash;
+  check('moving a bag is free', moveObject(s, bag, 11, 3) === null && bag.x === 11 && s.cash === cash);
+  check('moving onto bare ceiling fails', moveObject(s, bag, 20, 3) === 'Needs a plywood deck');
 }
 
 function saves() {
@@ -135,6 +213,14 @@ function saves() {
   );
 
   const key = [...store.keys()][0];
+  const old = JSON.parse(store.get(key)!);
+  old.version = 4;
+  for (const c of old.crew) delete c.calledOff;
+  delete old.ladder;
+  store.set(key, JSON.stringify(old));
+  const upgraded = loadGame();
+  check('a version 4 save upgrades', !!upgraded && upgraded.version === SAVE_VERSION && upgraded.crew[0].calledOff === '' && Array.isArray(upgraded.ladder));
+
   const broken = JSON.parse(store.get(key)!);
   broken.version = SAVE_VERSION + 1;
   store.set(key, JSON.stringify(broken));
@@ -159,6 +245,11 @@ placement();
 jobs();
 suspicion();
 inspections();
+decoys();
+queue();
+shifts();
+stores();
+moving();
 saves();
 determinism();
 

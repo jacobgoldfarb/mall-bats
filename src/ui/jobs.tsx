@@ -7,7 +7,7 @@ import { JOB, JOBS, type JobDef, type JobId } from '../game/defs';
 import { jobEstimate } from '../game/jobs';
 import { levelOf } from '../game/ops';
 import type { Crew, GameState } from '../game/state';
-import { CLOSING_SPAN, dayOf, formatClock, mallHours } from '../game/time';
+import { CLOSING_SPAN, dayOf, formatClock, mallHours, md } from '../game/time';
 import { crewSprite } from '../render/renderer';
 import { Bar, Dots, Portrait } from './widgets';
 
@@ -44,11 +44,21 @@ const jobOf = (c: Crew, shift: Shift) => (shift === 'day' ? c.dayJob : c.nightJo
 function setJob(c: Crew, shift: Shift, job: JobId) {
   if (shift === 'day') c.dayJob = job;
   else c.nightJob = job;
-  if (job === 'rest') c.fillIn = false;
-  c.waitUntil = 0;
   c.jobCooldown = {};
   audio.play('click');
   refresh();
+}
+
+const SEASONAL_LEAD_DAYS = 3;
+
+function onTheBoard(s: GameState, def: JobDef): boolean {
+  if (!def.only) return true;
+  const today = dayOf(s.time);
+  for (let k = 0; k <= SEASONAL_LEAD_DAYS; k++) {
+    const [m, d] = md(today + k);
+    if (m === def.only[0] && d === def.only[1]) return true;
+  }
+  return false;
 }
 
 export function openJobs(crewId: number | null, shift?: Shift) {
@@ -64,8 +74,8 @@ function shiftHours(s: GameState, shift: Shift): string {
   return shift === 'day' ? `While the mall is open · ${formatClock(hours.open)}–${formatClock(hours.close)}` : `After closing · ${formatClock(hours.close + CLOSING_SPAN)}–6:00 AM`;
 }
 
-function shiftJobs(shift: Shift): JobDef[] {
-  return JOBS.filter((j) => j.id !== 'rest' && (j.shift === shift || j.shift === 'both'));
+function shiftJobs(s: GameState, shift: Shift): JobDef[] {
+  return JOBS.filter((j) => j.id !== 'rest' && (j.shift === shift || j.shift === 'both') && onTheBoard(s, j));
 }
 
 export function JobsMenu({ s }: { s: GameState }) {
@@ -73,7 +83,7 @@ export function JobsMenu({ s }: { s: GameState }) {
   const selected = crew.find((x) => x.id === app.jobsCrew) ?? null;
   const shift = app.jobsShift;
   const level = levelOf(s);
-  const jobs = shiftJobs(shift);
+  const jobs = shiftJobs(s, shift);
   const open = jobs.filter((j) => level >= j.level);
   const locked = jobs.filter((j) => level < j.level);
   const close = () => ((app.menu = 'none'), (draggedCrew = null), refresh());
@@ -125,6 +135,9 @@ function CrewTray({ s, crew, selected, shift }: { s: GameState; crew: Crew[]; se
         <span class="tray-label">{resting ? `THE BATS · ${resting} RESTING` : 'THE BATS'}</span>
         <button class="btn small" disabled={!selected || jobOf(selected, shift) === 'rest'} onClick={() => selected && setJob(selected, shift, 'rest')} title={selected ? `Take ${selected.name} off this shift` : 'Select a Bat'}>
           Rest{selected ? ` ${selected.name}` : ''}
+        </button>
+        <button class="btn small" disabled={resting === crew.length} onClick={() => crew.forEach((c) => setJob(c, shift, 'rest'))}>
+          Rest All
         </button>
       </div>
       <div class="tray-chips">

@@ -13,10 +13,13 @@ interface HijinxChoice {
   run: (s: GameState, c: Crew) => void;
 }
 
+type Where = 'mall' | 'home' | 'any';
+
 interface Hijinx {
   key: string;
   art: string;
   title: string;
+  where: Where;
   hours?: [number, number];
   when?: (s: GameState) => boolean;
   body: (s: GameState, c: Crew) => string;
@@ -37,6 +40,9 @@ function complain(s: GameState, roomId: string, amount: number) {
   rs.complaint = Math.max(0, rs.complaint + amount);
 }
 
+const WALLET_GOODWILL = 10;
+export const HIJINX_HOURS: [number, number] = [9, 21];
+
 const good = (s: GameState, text: string) => (log(s, text, 'good'), sfx('good'));
 const bad = (s: GameState, text: string) => log(s, text, 'warn');
 
@@ -45,6 +51,7 @@ const HIJINX: Hijinx[] = [
     key: 'wallet',
     art: 'wallet',
     title: 'A Wallet Under the Bench',
+    where: 'mall',
     body: (_s, c) => `${c.name} found a velcro wallet under a bench. Inside: $40, a Blockbuster card, and a Polaroid of somebody's dog.`,
     choices: [
       { label: () => 'Keep the $40', run: (s) => (earn(s, 40), sfx('cash')) },
@@ -53,7 +60,9 @@ const HIJINX: Hijinx[] = [
         run: (s) => {
           raiseSuspicion(s, -3, 'good deed');
           addMood(s, 4);
-          good(s, 'Turned in the wallet. Gary was touched. Things feel a bit lighter.');
+          if (s.gary.replaced) return good(s, 'Turned in the wallet. Officer Kowalski logged it without looking up. Things feel a bit lighter anyway.');
+          s.gary.affinity = Math.min(100, s.gary.affinity + WALLET_GOODWILL);
+          good(s, `Turned in the wallet. Gary was touched. Gary's goodwill +${WALLET_GOODWILL}.`);
         },
       },
     ],
@@ -62,6 +71,7 @@ const HIJINX: Hijinx[] = [
     key: 'mannequin',
     art: 'mannequin',
     title: 'Window Dressing',
+    where: 'mall',
     hours: [10, 20],
     body: (_s, c) =>
       `${c.name} dozed off behind the American Eagle window display. The visual merchandiser didn't notice. ${c.name} is now wearing cargo shorts, a puka shell necklace, and a SALE sign.\n\nA crowd is gathering.`,
@@ -100,6 +110,7 @@ const HIJINX: Hijinx[] = [
     key: 'pretzel',
     art: 'pretzel',
     title: 'Runaway Pretzel Cart',
+    where: 'mall',
     hours: [10, 20],
     body: () => `The Pretzel Pals cart lost a wheel at the top of the Center Court ramp. It is rolling toward the fountain at alarming speed. The vendor is chasing it, yelling "MY SALT!"`,
     choices: [
@@ -132,6 +143,7 @@ const HIJINX: Hijinx[] = [
     key: 'ferret',
     art: 'ferret',
     title: 'A Ferret in the Ducts',
+    where: 'home',
     when: (s) => !s.flags.ferret,
     body: (_s, c) => `A ferret escaped from Pet Palace and moved into your ceiling. So far he has stolen a spork, two AA batteries, and ${c.name}'s left sock. He is staring at you. He is vibrating.`,
     choices: [
@@ -158,6 +170,7 @@ const HIJINX: Hijinx[] = [
     key: 'psychic',
     art: 'psychic',
     title: 'Madame Zelda Senses Something',
+    where: 'mall',
     hours: [10, 20],
     body: (_s, c) => `The psychic at the Center Court kiosk grabs ${c.name}'s wrist as they walk by.\n\n"You... live... ABOVE."\n\nShe has a two-for-one tarot special going.`,
     choices: [
@@ -174,7 +187,7 @@ const HIJINX: Hijinx[] = [
             s.pools.fountain = (s.pools.fountain ?? 0) + 30;
             good(s, 'The Ace of Cups. "Wealth... from water." There is $30 more than usual in the fountain tonight.');
           } else {
-            earn(s, 20);
+            s.cash += 20;
             addMood(s, -2);
             bad(s, 'The Tower card. Madame Zelda refunds you out of pity and gives you a crystal "for the road."');
           }
@@ -199,6 +212,7 @@ const HIJINX: Hijinx[] = [
     key: 'mallwalkers',
     art: 'mallwalkers',
     title: 'Mallwalker Turf War',
+    where: 'any',
     hours: [7, 11],
     body: (_s, c) =>
       `The Northgate Mallwalkers Club says ${c.name} has been cutting corners on their laps. Their captain, Doris, 81, in a matching teal tracksuit, demands satisfaction.\n\nThree laps. Loser buys Dairy Queen.`,
@@ -231,6 +245,7 @@ const HIJINX: Hijinx[] = [
     key: 'vent',
     art: 'vent',
     title: 'The Ceiling Speaks',
+    where: 'home',
     hours: [10, 20],
     body: (_s, c) => `The vent over EB Games carries ${c.name}'s voice straight down. A kid playing the Halo 2 demo just asked the ceiling if it was God.`,
     choices: [
@@ -260,6 +275,7 @@ const HIJINX: Hijinx[] = [
     key: 'hotdog',
     art: 'hotdog',
     title: 'The Hot Dog Suit',
+    where: 'any',
     body: (_s, c) => `Someone threw a six-foot foam hot dog costume into the dumpster behind the Food Court. ${c.name} is already wearing it. You did not see them put it on.`,
     choices: [
       {
@@ -291,6 +307,7 @@ const HIJINX: Hijinx[] = [
     key: 'furby',
     art: 'furby',
     title: 'The Furby Knows',
+    where: 'home',
     body: (_s, c) => `A Furby fell through a KB Toys vent and landed in your ceiling. It will not stop talking. It is learning words. It has learned "${c.name}."`,
     choices: [
       {
@@ -318,6 +335,7 @@ const HIJINX: Hijinx[] = [
     key: 'glamour',
     art: 'glamour',
     title: 'Glamour Shots',
+    where: 'mall',
     hours: [10, 20],
     body: (_s, c) =>
       `${c.name} wandered into the free makeover promo at the Glamour Shots booth. They now have frosted tips, a denim-on-denim outfit, and a feather boa. A photographer is fogging the backdrop.`,
@@ -346,17 +364,21 @@ const HIJINX: Hijinx[] = [
 
 const HIJINX_BY_KEY = Object.fromEntries(HIJINX.map((h) => [h.key, h]));
 
-const inHours = (s: GameState, h: Hijinx, hour: number) => !h.hours || (!!mallHours(dayOf(s.time)) && hour >= h.hours[0] && hour < h.hours[1]);
+function inHours(s: GameState, h: Hijinx, hour: number): boolean {
+  if (!h.hours) return true;
+  const open = mallHours(dayOf(s.time));
+  return !!open && hour >= h.hours[0] && hour < Math.min(h.hours[1], open.close / 60);
+}
+
+const isAt = (c: Crew, where: Where) => c.state !== 'away' && c.state !== 'fleeing' && c.state !== 'sleeping' && (where === 'any' || (where === 'mall') === (c.layer === 0));
 
 export function startHijinx(s: GameState, hour: number) {
-  const crew = s.crew.filter((c) => c.awayUntil <= s.time);
-  if (!crew.length) return;
-  const eligible = HIJINX.filter((h) => inHours(s, h, hour) && (!h.when || h.when(s)));
+  const eligible = HIJINX.filter((h) => inHours(s, h, hour) && (!h.when || h.when(s)) && s.crew.some((c) => isAt(c, h.where)));
   if (!eligible.length) return;
   const lastSeen = (h: Hijinx) => s.flags[`hjx_${h.key}`] ?? -99;
   const stalest = Math.min(...eligible.map(lastSeen));
   const h = rand.pick(eligible.filter((e) => lastSeen(e) <= stalest + 7));
-  const c = rand.pick(crew);
+  const c = rand.pick(s.crew.filter((x) => isAt(x, h.where)));
   s.flags[`hjx_${h.key}`] = dayOf(s.time);
   pushModal(s, {
     title: h.title,

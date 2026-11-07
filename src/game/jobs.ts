@@ -1,4 +1,4 @@
-import { POOL_OF, baseCycle, has, jobUnavailable } from './crew';
+import { MAX_PER_SPOT, POOL_OF, baseCycle, has, jobUnavailable } from './crew';
 import { JOB, LOT, type JobDef, type JobId } from './defs';
 import { stat } from './needs';
 import type { Crew, GameState } from './state';
@@ -34,7 +34,7 @@ function yieldText(s: GameState, c: Crew, job: JobId, cyclesPerHour: number): st
     case 'fountain':
       return `${range((2.5 + stat(s, c, 'handy') * 1.2) * 0.7 * n, (2.5 + stat(s, c, 'handy') * 1.2) * 1.3 * n, cash)}/hr`;
     case 'arcade':
-      return `${range((3 + stat(s, c, 'handy') * 1.6) * 0.8 * n, (3 + stat(s, c, 'handy') * 1.6) * 1.2 * n, cash)}/hr`;
+      return `${range((4 + stat(s, c, 'handy') * 2.2) * 0.8 * n, (4 + stat(s, c, 'handy') * 2.2) * 1.2 * n, cash)}/hr`;
     case 'busk': {
       const base = (1 + stat(s, c, 'charm')) * crowd * (has(c, 'performer') ? 1.6 : 1) * n;
       return `${range(base * 0.6, base * 1.4, cash)}/hr`;
@@ -71,6 +71,18 @@ function yieldText(s: GameState, c: Crew, job: JobId, cyclesPerHour: number): st
     }
     case 'tinker':
       return `${per(LOT * n)} goods/hr from ${per(2 * LOT * n)} parts`;
+    case 'scrap':
+      return `$${per((6 + stat(s, c, 'handy') * 2) * n)}/hr from ${per(10 * n)} parts`;
+    case 'rig':
+      return `−${((0.6 + stat(s, c, 'handy') * 0.3) * n).toFixed(1)} kWh/hr off a bill`;
+    case 'lookout':
+      return 'Bats under the periscope are harder to spot';
+    case 'listings':
+      return `eBay sells about ${Math.round((100 * (20 + stat(s, c, 'charm') * 5)) / 30)}% faster`;
+    case 'doorbuster':
+      return `${range((3 + stat(s, c, 'charm') * 2) * 0.7 * n, (3 + stat(s, c, 'charm') * 2) * 1.3 * n, cash)}/hr`;
+    case 'zalez':
+      return `$${(1600 + stat(s, c, 'stealth') * 250).toLocaleString()} and 10 goods, once`;
   }
 }
 
@@ -80,8 +92,9 @@ function limitText(s: GameState, job: JobId): string | null {
     const left = Math.max(0, Math.floor(s.pools[pool] ?? 0));
     return job === 'fountain' || job === 'arcade' ? `$${left} left today` : `${left} left today`;
   }
-  if (job === 'returns' || job === 'kiosk' || job === 'popup') return `${Math.floor(s.goods)} goods in stash`;
-  if (job === 'tinker') return `${Math.floor(s.parts)} parts in stash`;
+  if (job === 'returns' || job === 'kiosk' || job === 'popup' || job === 'listings') return `${Math.floor(s.goods)} goods in stash`;
+  if (job === 'tinker' || job === 'scrap') return `${Math.floor(s.parts)} parts in stash`;
+  if (JOB[job].spot) return `${MAX_PER_SPOT} Bats at most`;
   return null;
 }
 

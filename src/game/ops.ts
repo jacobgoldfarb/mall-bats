@@ -62,10 +62,17 @@ export function pressure(s: GameState, fromLevel: number, fullAtLevel: number): 
   return Math.min(1, Math.max(0, (s.totalEarned - from) / (full - from)));
 }
 
+const RAMP_HINTS: Record<number, string> = {
+  3: 'Officer Dana bought a new notepad.',
+  4: 'Dale from Maintenance bought a taller ladder.',
+  6: 'Ms. Pruitt hired an accountant.',
+};
+
 function levelUp(s: GameState, level: number) {
   s.level = level;
   const { title } = levelInfo(level);
   log(s, `Level ${level}: ${title}. New: ${unlocksAt(level).join(', ')}.`, 'good');
+  if (RAMP_HINTS[level]) log(s, RAMP_HINTS[level], 'warn');
   levelUpQueue.push(level);
   sfx('levelup');
 }
@@ -95,7 +102,11 @@ export function raiseSuspicion(s: GameState, amount: number, reason: string) {
     if (getDerived(s).scanner) a *= 0.85;
     if (s.gary.insider) a *= 0.85;
   }
-  s.suspicion = Math.max(0, Math.min(100, s.suspicion + a));
+  const applied = Math.max(0, Math.min(100, s.suspicion + a)) - s.suspicion;
+  s.suspicion += applied;
+  const entry = (s.tally.suspicion[reason] ??= { amount: 0, count: 0 });
+  entry.amount += applied;
+  entry.count++;
   if (a >= 2) log(s, `Suspicion +${a.toFixed(0)}: ${reason}`, 'bad');
   const after = suspicionLevel(s.suspicion);
   if (after > before) {
@@ -134,5 +145,5 @@ export const ACHIEVEMENTS: Record<string, { name: string; desc: string }> = {
 
 export function auctionBid(s: GameState): number {
   const mult = { easy: 0.75, normal: 1, hard: 1.25 }[s.difficulty];
-  return Math.round(((18000 + 30000 * s.mallHealth) * mult) / 100) * 100;
+  return Math.round(((15500 + 30000 * s.mallHealth + s.bidPremium) * mult) / 100) * 100;
 }

@@ -1,10 +1,11 @@
-import { app, buildLayer, refresh, selectBuild, selectObject, toast, SPEEDS } from './app';
+import { app, buildLayer, refresh, selectBuild, selectObject, startMove, toast, SPEEDS } from './app';
 import { audio } from './audio/audio';
 import { shiftNow } from './game/crew';
-import { BUILD } from './game/defs';
+import { BUILD, canRotate } from './game/defs';
 import { openJobs } from './ui/jobs';
+import { allHome } from './ui/hud';
 import { LAYOUT, idx, inBounds } from './game/layout';
-import { demolishAt, placeObject, rotateObject } from './game/sim';
+import { demolishAt, moveObject, placeObject, rotateObject } from './game/sim';
 import { getDerived } from './game/world';
 
 const keys = new Set<string>();
@@ -94,8 +95,9 @@ export function attachInput(canvas: HTMLCanvasElement) {
       refresh();
       return;
     }
-    if (app.view.layer === 1 && inBounds(t.x, t.y)) {
-      const obj = getDerived(app.state).objAt.get(idx(t.x, t.y));
+    if (inBounds(t.x, t.y)) {
+      const d = getDerived(app.state);
+      const obj = (app.view.layer === 1 ? d.objAt : d.floorAt).get(idx(t.x, t.y));
       selectObject(obj ? obj.id : null);
       if (obj) audio.play('click');
     } else selectObject(null);
@@ -143,7 +145,18 @@ export function attachInput(canvas: HTMLCanvasElement) {
     const t = app.renderer!.screenToTile(e.clientX, e.clientY);
     const start = app.view.dragStart;
     app.view.dragStart = null;
-    if (app.view.build) {
+    const moving = app.state.objects.find((o) => o.id === app.view.moving);
+    if (moving) {
+      const err = moveObject(app.state, moving, t.x, t.y);
+      if (err) {
+        toast(err, 'bad');
+        audio.play('bad');
+      } else {
+        if (canRotate(moving.type)) moving.flipped = app.view.flip;
+        audio.play('build');
+        selectBuild(null);
+      }
+    } else if (app.view.build) {
       const draggable = app.view.build === 'deck' || app.view.build === 'foam';
       if (draggable) placeRect(start.x, start.y, t.x, t.y);
       else {
@@ -253,6 +266,16 @@ export function attachInput(canvas: HTMLCanvasElement) {
       case 'H':
         app.renderer!.centerOn(LAYOUT.hatch.x + 0.5, LAYOUT.hatch.y + 0.5);
         break;
+      case 'g':
+      case 'G':
+        allHome(app.state);
+        break;
+      case 'm':
+      case 'M': {
+        const obj = app.state.objects.find((o) => o.id === app.selectedObj);
+        if (obj && !BUILD[obj.type].floor) startMove(obj);
+        break;
+      }
     }
     refresh();
   });

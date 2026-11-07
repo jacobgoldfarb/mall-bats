@@ -15,8 +15,6 @@ import { BODY_FONT, DISPLAY_FONT } from './render/draw';
 import { Renderer } from './render/renderer';
 import { loadSprites } from './render/sprites';
 import { App, startGame } from './ui/App';
-import '@fontsource/pixelify-sans/latin-400.css';
-import '@fontsource/pixelify-sans/latin-600.css';
 import '@fontsource/jersey-10/latin-400.css';
 import '@fontsource/vt323/latin-400.css';
 import './ui/styles.css';

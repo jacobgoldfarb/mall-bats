@@ -142,7 +142,9 @@ export type SpotId =
   | 'boundaries'
   | 'gary'
   | 'pallets'
-  | 'stockroom';
+  | 'stockroom'
+  | 'zalez'
+  | 'doorbuster';
 
 export interface Waypoint {
   x: number;
@@ -275,6 +277,8 @@ export function buildLayout(): Layout {
       gary: { x: 33, y: 3 },
       pallets: { x: 45, y: 3 },
       stockroom: { x: 19, y: 1 },
+      zalez: { x: 39, y: 19 },
+      doorbuster: { x: 41, y: 13 },
     },
     nightRoutes: [],
     dayRoute: [],

@@ -48,7 +48,7 @@
 
 The HUD reads as mall signage: dark plum backlit panels, teal header bars with the magenta + gold "mall stripe" underneath.
 
-- **Fonts** (self-hosted via `@fontsource`, CSP blocks remote fonts): `Jersey 10` for headings, names and big numbers; `Pixelify Sans` for body copy; `VT323` for all-caps labels, key hints and LED readouts (clock, log timestamps), at 12px or larger so 8 and 2 stay legible. Canvas text uses `BODY_FONT` / `DISPLAY_FONT` from `src/render/draw.ts`.
+- **Fonts** (self-hosted via `@fontsource`, CSP blocks remote fonts): `Jersey 10` for headings, names and big numbers; `Pixelify Bats` (Pixelify Sans with a redrawn 2 and 5, built by `scripts/fonts/patch-digits.py` into `src/assets/fonts/`) for body copy; `VT323` for all-caps labels, key hints and LED readouts (clock, log timestamps), at 12px or larger so 8 and 2 stay legible. Canvas text uses `BODY_FONT` / `DISPLAY_FONT` from `src/render/draw.ts`.
 - **Shapes**: no rounded corners or gradients-as-gloss. Panels and buttons use the notched pixel outline (`--outline`, `--outline-3`), a 2px top highlight, a darker bottom edge, and a hard offset drop shadow.
 - **Buttons**: `.btn` is teal, `.on` magenta, `.danger` red, `.ghost` plum. Show hotkeys with `<kbd>`.
 - **Icons**: no emoji. Use `icon.*` assets via `<Icon name>` (`src/ui/icons.tsx`), 32px native (16px for inline); modal art is 64px shown at 128px.

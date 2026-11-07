@@ -366,7 +366,7 @@ export function drawDog(ctx: Ctx, px: number, py: number, t: number, walking: bo
   ctx.fillRect(px - 8 * flip - 1, py - 13 + Math.sin(t * 0.8) * 1.5, 2, 4);
 }
 
-export const BODY_FONT = '"Pixelify Sans", Verdana, sans-serif';
+export const BODY_FONT = '"Pixelify Bats", Verdana, sans-serif';
 export const DISPLAY_FONT = '"Jersey 10", "Arial Black", sans-serif';
 
 export function bubble(ctx: Ctx, px: number, py: number, text: string, tone?: 'alert' | 'info' | 'happy') {

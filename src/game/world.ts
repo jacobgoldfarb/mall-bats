@@ -1,7 +1,7 @@
 import { BUILD, NOOKS, NOOK_RADIUS, type BuildId, type NookDef, type NookId } from './defs';
 import { C_OPEN, E_GATE, E_GLASS, E_OPEN, E_PUBLIC, E_STAFF, H, LAYOUT, N, W, edgeBetween, idx, inBounds } from './layout';
 import type { GameState, Placed } from './state';
-import { dayOf, mallHours, minuteOfDay, phaseAt } from './time';
+import { dayOf, isCold, mallHours, minuteOfDay, phaseAt } from './time';
 
 export interface Derived {
   objAt: Map<number, Placed>;
@@ -22,8 +22,6 @@ export interface Derived {
   pcSignal: number;
   scanner: boolean;
   fridge: boolean;
-  supplyTotal: number;
-  demandTotal: number;
   signs: Placed[];
   nooks: Nook[];
   nookOf: Map<number, NookId>;
@@ -65,6 +63,8 @@ export function storeHasPower(s: GameState, roomIdx: number): boolean {
   return !rs.vacant || rs.popup;
 }
 
+export const wifiAt = (s: GameState, x: number, y: number) => (storeHasPower(s, LAYOUT.roomIndex['boundaries']) ? boundariesSignal(x, y) : 0);
+
 function computeDerived(s: GameState): Derived {
   const objAt = new Map<number, Placed>();
   const drops = new Set<number>();
@@ -90,8 +90,6 @@ function computeDerived(s: GameState): Derived {
     pcSignal: 0,
     scanner: false,
     fridge: false,
-    supplyTotal: 0,
-    demandTotal: 0,
     signs: [],
     nooks: [],
     nookOf: new Map(),
@@ -110,13 +108,11 @@ function computeDerived(s: GameState): Derived {
     src.powered = live;
     src.tapRoom = BUILD[src.type].offGrid ? -1 : room;
     remaining.set(src.id, live ? BUILD[src.type].supply! : 0);
-    if (live) d.supplyTotal += BUILD[src.type].supply!;
   }
   const consumers = s.objects.filter((o) => BUILD[o.type].power);
   consumers.sort((a, b) => BUILD[b.type].power! - BUILD[a.type].power!);
   for (const o of consumers) {
     const need = BUILD[o.type].power!;
-    d.demandTotal += need;
     let best: Placed | null = null;
     let bestD = Infinity;
     for (const src of sources) {
@@ -142,7 +138,7 @@ function computeDerived(s: GameState): Derived {
     if (!def.power && !def.supply) o.powered = true;
   }
 
-  const cold = isColdNow(s);
+  const cold = isCold(dayOf(s.time));
   for (const o of s.objects) {
     const def = BUILD[o.type];
     if (def.drop) drops.add(idx(o.x, o.y));
@@ -156,7 +152,7 @@ function computeDerived(s: GameState): Derived {
     if (def.hangout && o.powered) d.leisure.push(o);
     if (o.type === 'pc' && o.powered) {
       d.pc = o;
-      d.pcSignal = boundariesSignal(o.x, o.y);
+      d.pcSignal = wifiAt(s, o.x, o.y);
     }
     if (o.type === 'scanner' && o.powered) d.scanner = true;
     if (o.type === 'fridge' && o.powered) d.fridge = true;
@@ -219,15 +215,9 @@ function findNooks(s: GameState, d: Derived) {
   }
 }
 
-function isColdNow(s: GameState) {
-  const day = Math.floor(s.time / 1440);
-  const date = new Date(2004, 9, 1 + day);
-  return date.getMonth() === 11 || (date.getMonth() === 10 && date.getDate() >= 20);
-}
-
 export const SKIMMABLE = ['store', 'food', 'foodcourt'];
 
-export function canPlace(s: GameState, type: BuildId, x: number, y: number): string | null {
+export function canPlace(s: GameState, type: BuildId, x: number, y: number, moving?: Placed): string | null {
   if (!inBounds(x, y)) return 'Out of bounds';
   if (BUILD[type].floor) return canPlaceFloor(s, type, x, y);
   const i = idx(x, y);
@@ -250,9 +240,10 @@ export function canPlace(s: GameState, type: BuildId, x: number, y: number): str
     return null;
   }
   if (!s.deck[i]) return 'Needs a plywood deck';
-  if (getDerived(s).objAt.has(i)) return 'Something is already here';
-  if (def.unique && s.objects.some((o) => o.type === type)) return 'You can only have one';
-  if (type === 'pc' && boundariesSignal(x, y) <= 0) return 'No Wi-Fi here. Get closer to Coles';
+  const here = getDerived(s).objAt.get(i);
+  if (here && here !== moving) return 'Something is already here';
+  if (def.unique && s.objects.some((o) => o.type === type && o !== moving)) return 'You can only have one';
+  if (type === 'pc' && wifiAt(s, x, y) <= 0) return storeHasPower(s, LAYOUT.roomIndex['boundaries']) ? 'No Wi-Fi here. Get closer to Coles' : 'Coles closed. The Wi-Fi went with it.';
   if (type === 'splice') {
     const ri = LAYOUT.roomAt[i];
     if (!storeHasPower(s, ri)) return 'This store is vacant. The power is cut.';
@@ -260,7 +251,7 @@ export function canPlace(s: GameState, type: BuildId, x: number, y: number): str
   if (def.racket) {
     const ri = LAYOUT.roomAt[i];
     if (!SKIMMABLE.includes(LAYOUT.rooms[ri].kind) || s.rooms[ri].vacant || s.rooms[ri].popup) return 'Needs an open store or restaurant below';
-    if (s.objects.some((o) => o.type === type && LAYOUT.roomAt[idx(o.x, o.y)] === ri)) return 'This store already has a siphon';
+    if (s.objects.some((o) => o.type === type && o !== moving && LAYOUT.roomAt[idx(o.x, o.y)] === ri)) return 'This store already has a siphon';
   }
   if (type === 'rope') {
     const fi = LAYOUT.fixtureAt[i];

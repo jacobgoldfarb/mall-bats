@@ -49,7 +49,6 @@ export interface Crew extends Agent {
   heat: number;
   dayJob: JobId;
   nightJob: JobId;
-  fillIn: boolean;
   activeJob: JobId;
   jobCooldown: Partial<Record<JobId, number>>;
   state: CrewState;
@@ -65,7 +64,7 @@ export interface Crew extends Agent {
   thought: string;
   spottedBy: number;
   waitUntil: number;
-  recall: boolean;
+  calledOff: string;
   hiding: boolean;
   camWait: number;
   replanAt: number;
@@ -105,6 +104,7 @@ export interface Placed {
   delivered?: boolean;
   expires?: number;
   luredBy?: number;
+  beeping?: boolean;
   deterred?: number;
 }
 
@@ -132,6 +132,8 @@ export interface RoomState {
   hotY: number;
   hotW: number;
   lastWarn: number;
+  strain: number;
+  decoys: number;
 }
 
 export type LogKind = 'pa' | 'info' | 'good' | 'bad' | 'warn' | 'phone';
@@ -172,6 +174,13 @@ export interface Candidate {
   look: Look;
 }
 
+export interface Visitor {
+  id: number;
+  candidate: Candidate;
+  intro: string;
+  until: number;
+}
+
 export interface Camera {
   x: number;
   y: number;
@@ -179,7 +188,10 @@ export interface Camera {
   sweep: number;
   phase: number;
   active: boolean;
-  cooldown: number;
+}
+
+export interface Tally {
+  suspicion: Record<string, { amount: number; count: number }>;
 }
 
 export interface GameStats {
@@ -213,7 +225,6 @@ export interface GameState {
   mood: number;
   missedMeals: number;
   miserable: number;
-  excuseFatigue: number;
   totalEarned: number;
   level: number;
   suspicion: number;
@@ -230,19 +241,20 @@ export interface GameState {
   log: LogEntry[];
   modals: Modal[];
   flags: Record<string, number>;
-  gary: { affinity: number; recruited: boolean; insider: boolean; gifts: number; replaced: boolean };
+  gary: { affinity: number; recruited: boolean; insider: boolean; replaced: boolean; coverWeek: number };
   business: { kiosk: boolean; popupRoom: number };
   objective: number;
   stats: GameStats;
   achievements: string[];
   nextId: number;
-  candidate: Candidate | null;
+  ladder: Visitor[];
+  agenda: { key: string; hour: number }[];
+  tally: Tally;
+  bidPremium: number;
   ebayTimer: number;
   lastDay: number;
-  lastHour: number;
   dailyIncome: number[];
   todayIncome: number;
-  todayBlackFriday: number;
   spottedTonight: boolean;
-  over: { won: boolean; title: string; text: string } | null;
+  over: { won: boolean; title: string; text: string; margin?: number } | null;
 }

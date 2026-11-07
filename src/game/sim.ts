@@ -1,15 +1,15 @@
 import { BUILD, LOT, NOOK_SMELL, canRotate, type BuildId } from './defs';
 import { agentNode, coolHeat, crewLeaves, crowdNow, idleBubble, noiseFromCrew, sendCrewHome, updateCrew } from './crew';
-import { dailyCandidates, randomHourly, runScript } from './events';
+import { closeStore, dailyCandidates, planDay, randomHourly, runScript, visitorsLeave } from './events';
 import { ferretForage } from './hijinx';
-import { FATIGUE_KEPT_PER_DAY, inspectionHotspotUpdate, rollInspection, scheduleInspection } from './inspect';
+import { decoyPrice, inspectionHotspotUpdate, rollInspection, scheduleInspection } from './inspect';
 import { LAYOUT, N, W, H, idx, inBounds } from './layout';
 import { FOOD_PRICE, MEAL_HOURS, hourlyMood, serveMeal } from './needs';
 import { checkObjectives } from './objectives';
-import { auctionBid, earn, log, pa, pressure, raiseSuspicion, rand, sfx, suspicionDecay, unlock, updateCameras } from './ops';
-import { detection, ensureStaff, spawnShopper, startInspector, trackStaffDoors, updateCrewDanger, updateMallItems, updateNpcs } from './npc';
-import type { GameState, Placed } from './state';
-import { AUCTION_DAY, dayOf, md, minuteOfDay, phaseAt, seasonFactor, weekday, type Phase } from './time';
+import { auctionBid, earn, log, pa, pressure, pushModal, raiseSuspicion, rand, sfx, suspicionDecay, suspicionLevel, unlock, updateCameras } from './ops';
+import { detection, ensureStaff, onPatrolRoute, spawnShopper, startInspector, trackStaffDoors, updateCrewDanger, updateMallItems, updateNpcs } from './npc';
+import type { Crew, GameState, Placed } from './state';
+import { AUCTION_DAY, dayOf, hourCurve, mallHours, md, minuteOfDay, phaseAt, seasonFactor, weekday, type Phase } from './time';
 import { canPlace, getDerived, markDirty, roomTiles } from './world';
 
 export const noiseField = new Float32Array(N);
@@ -79,10 +79,38 @@ export function presence(s: GameState, roomIdx: number, phase: Phase): number {
   }
 }
 
+const isBlackFriday = (s: GameState) => {
+  const [m, d] = md(dayOf(s.time));
+  return m === 11 && d === 26;
+};
+
+const STRAIN_WARN = 2;
+const STRAIN_CLOSE = 4;
+const STRAIN_FADE_PER_DAY = 1 / 7;
+
+function strainStore(s: GameState, ri: number) {
+  const r = LAYOUT.rooms[ri];
+  const rs = s.rooms[ri];
+  if (r.kind !== 'store' || rs.vacant) return;
+  const before = rs.strain;
+  rs.strain += 1;
+  const focus = { x: Math.floor((r.x0 + r.x1) / 2), y: Math.floor((r.y0 + r.y1) / 2), layer: 1 as const };
+  if (rs.strain >= STRAIN_CLOSE) closeStore(s, r.id, true);
+  else if (before < STRAIN_WARN && rs.strain >= STRAIN_WARN) log(s, `The manager at ${r.name} told Ms. Pruitt that one more bad week and they're breaking the lease.`, 'warn', focus);
+}
+
+function reportStore(s: GameState, ri: number, reason: string) {
+  const lockdown = suspicionLevel(s.suspicion) >= 4;
+  raiseSuspicion(s, COMPLAINT_REPORT, reason);
+  strainStore(s, ri);
+  if (lockdown && !s.inspections.some((i) => i.kind === 'sweep' && i.state !== 'done')) scheduleInspection(s, ri, 'sweep', 'Mall Management called the police.');
+}
+
 function complaints(s: GameState, dt: number) {
   const phase = phaseAt(s.time);
   const crowd = crowdNow(s);
   const d = getDerived(s);
+  const festival = isBlackFriday(s);
   for (let ri = 0; ri < LAYOUT.rooms.length; ri++) {
     const r = LAYOUT.rooms[ri];
     const rs = s.rooms[ri];
@@ -92,6 +120,7 @@ function complaints(s: GameState, dt: number) {
       rs.complaint = 0;
       continue;
     }
+    if (festival) continue;
     const p = presence(s, ri, phase);
     if (p <= 0) continue;
     const mask = phase === 'open' ? r.noiseMask * (0.55 + 0.45 * Math.min(1, crowd)) : r.noiseMask * 0.3;
@@ -114,7 +143,7 @@ function complaints(s: GameState, dt: number) {
     }
     if (rs.complaint >= 100) {
       rs.complaint = COMPLAINT_AFTER_REPORT;
-      raiseSuspicion(s, COMPLAINT_REPORT, `${r.name} reported ${r.kind === 'service' || r.kind === 'concourse' ? 'creaking' : 'noises and smells'} in the ceiling`);
+      reportStore(s, ri, `${r.name} reported ${r.kind === 'service' || r.kind === 'concourse' ? 'creaking' : 'noises and smells'} in the ceiling`);
     }
   }
 }
@@ -158,25 +187,46 @@ function powerAccrual(s: GameState, dt: number) {
 
 export const POWER_MULT = { easy: 1.4, normal: 1, hard: 0.8 };
 
+export const powerCap = (s: GameState, ri: number) => LAYOUT.rooms[ri].powerCap * POWER_MULT[s.difficulty] * (3 - 2 * pressure(s, 6, 8));
+
+function biggestTap(s: GameState, ri: number) {
+  const tap = s.objects.filter((o) => o.type === 'splice' && o.tapRoom === ri).sort((a, b) => b.supplyLoad - a.supplyLoad)[0];
+  return tap ? { x: tap.x, y: tap.y } : undefined;
+}
+
+function overBudget(s: GameState, projection: number) {
+  return LAYOUT.rooms
+    .map((r, ri) => ({ ri, ratio: r.ceiling ? (s.rooms[ri].power * projection) / powerCap(s, ri) : 0 }))
+    .filter((o) => o.ratio > 1)
+    .sort((a, b) => b.ratio - a.ratio);
+}
+
 function billReview(s: GameState) {
-  const flagged: string[] = [];
-  LAYOUT.rooms.forEach((r, ri) => {
-    const rs = s.rooms[ri];
-    if (!r.ceiling) return;
-    const cap = r.powerCap * POWER_MULT[s.difficulty] * (3 - 2 * pressure(s, 6, 8));
-    if (rs.power > cap) {
-      const taps = s.objects.filter((o) => o.type === 'splice' && o.tapRoom === ri).sort((a, b) => b.supplyLoad - a.supplyLoad);
-      const at = taps[0] ? { x: taps[0].x, y: taps[0].y } : undefined;
-      scheduleInspection(s, ri, 'power', `The electric bill is ${Math.round((rs.power / cap) * 100)}% of normal.`, at);
-      flagged.push(r.name);
-    }
+  const [worst, ...squeaked] = overBudget(s, 1);
+  if (worst) {
+    scheduleInspection(s, worst.ri, 'power', `The electric bill is ${Math.round(worst.ratio * 100)}% of normal.`, biggestTap(s, worst.ri));
+    strainStore(s, worst.ri);
+  }
+  for (const rs of s.rooms) {
     rs.power = 0;
-  });
+    rs.decoys = 0;
+  }
+  const others = squeaked.map((o) => LAYOUT.rooms[o.ri].name).join(', ');
   log(
     s,
-    flagged.length ? `Monday utility review: unusual power draw flagged at ${flagged.join(', ')}.` : 'Monday utility review: all electric bills look normal. Nice.',
-    flagged.length ? 'bad' : 'good',
+    worst ? `Monday utility review: ${LAYOUT.rooms[worst.ri].name}'s bill got flagged.${others ? ` ${others} squeaked by.` : ''}` : 'Monday utility review: all electric bills look normal. Nice.',
+    worst ? 'bad' : 'good',
   );
+}
+
+const DAYS_BEFORE_REVIEW = 4;
+
+function billPreview(s: GameState) {
+  const running = overBudget(s, 7 / DAYS_BEFORE_REVIEW);
+  if (!running.length) return;
+  const names = running.map((o) => LAYOUT.rooms[o.ri].name).join(', ');
+  const at = biggestTap(s, running[0].ri);
+  log(s, `The electric bills at ${names} are running high.`, 'warn', at && { ...at, layer: 1 });
 }
 
 function ebay(s: GameState, dt: number) {
@@ -191,7 +241,7 @@ function ebay(s: GameState, dt: number) {
   const price = Math.round(rand.range(30, 54) * (lot / LOT) * (0.65 + 0.35 * d.pcSignal));
   earn(s, price);
   s.stats.ebaySold += lot;
-  if (s.stats.ebaySold >= 50 * LOT) unlock(s, 'POWERSELLER');
+  if (s.stats.ebaySold >= 50) unlock(s, 'POWERSELLER');
   log(s, `eBay: "VINTAGE ${rand.pick(['WALKMAN', 'TAMAGOTCHI', 'GAME BOY COLOR', 'DISCMAN', 'FURBY', 'PALM PILOT', 'ZIP DRIVE', 'BOOMBOX'])} L@@K!! RARE" (lot of ${lot}) sold for $${price}.`, 'good');
   sfx('cash');
 }
@@ -200,14 +250,14 @@ function refillPools(s: GameState) {
   const day = dayOf(s.time);
   const tf = seasonFactor(day) * (0.5 + 0.6 * s.mallHealth);
   const open = (id: string) => !s.rooms[LAYOUT.roomIndex[id]].vacant;
-  s.pools.fountain = Math.round(18 + 57 * tf);
+  s.pools.fountain = Math.round(30 + 90 * tf);
   s.pools.dumpster = Math.round(6 + 9 * tf);
   s.pools.vending = 5;
-  s.pools.arcade = open('funzone') ? Math.round(35 + 90 * tf) : 0;
+  s.pools.arcade = open('funzone') ? Math.round(60 + 140 * tf) : 0;
   s.pools.radiohut = open('radiohut') ? 55 : 0;
   s.pools.pallets = Math.round(60 + 40 * tf);
   s.pools.stockroom = 45;
-  s.pools.lostfound = 3 + (tf > 1.5 ? 3 : 0);
+  s.pools.lostfound = 5 + (tf > 1.5 ? 3 : 0);
   s.pools.samples = Math.round(8 + 4 * tf);
 }
 
@@ -223,9 +273,9 @@ function newDay(s: GameState) {
   s.food = Math.min(s.food, d.foodCap);
   s.gary.affinity = Math.max(0, s.gary.affinity - (s.gary.insider ? 0 : 1));
   s.mallHealth = Math.max(0.1, s.mallHealth - 0.0035);
+  for (const rs of s.rooms) rs.strain = Math.max(0, rs.strain - STRAIN_FADE_PER_DAY);
 
   s.suspicion = Math.max(0, s.suspicion - suspicionDecay(s, !s.spottedTonight));
-  s.excuseFatigue *= FATIGUE_KEPT_PER_DAY;
   updateCameras(s);
   if (!s.spottedTonight && s.flags.workedTonight) {
     s.stats.nightsClean++;
@@ -243,7 +293,7 @@ function newDay(s: GameState) {
     }
   }
   if (s.business.popupRoom >= 0) {
-    if (s.cash >= 90) s.cash -= 90;
+    if (s.cash >= POPUP_RENT) s.cash -= POPUP_RENT;
     else {
       s.rooms[s.business.popupRoom].popup = false;
       s.business.popupRoom = -1;
@@ -252,16 +302,91 @@ function newDay(s: GameState) {
     }
   }
 
-  if (s.miserable >= 18 && s.crew.length) {
-    crewLeaves(s, s.crew[s.crew.length - 1], 'The mood up here has been miserable for days. "I\'d rather sleep in the bus station."');
-    s.miserable = 8;
-  }
+  misery(s);
+  heistAftermath(s);
+  developerPressure(s);
+  if (day >= 1) morningReport(s);
 
   s.dailyIncome.push(Math.round(s.todayIncome));
   s.todayIncome = 0;
   dailyCandidates(s);
+  visitorsLeave(s);
   ferretForage(s);
+  planDay(s);
   if (day >= 3) log(s, `Day ${day + 1}. Developer bid: $${auctionBid(s).toLocaleString()}. Cash: $${Math.floor(s.cash).toLocaleString()}.`, 'info');
+}
+
+const MISERY_WARN = 12;
+const MISERY_QUIT = 18;
+
+const worstOff = (s: GameState): Crew =>
+  [...s.crew].filter((c) => c.state !== 'away').sort((a, b) => Number(b.bedId < 0) - Number(a.bedId < 0) || a.energy - b.energy)[0] ?? s.crew[0];
+
+function misery(s: GameState) {
+  if (!s.crew.length) return;
+  if (s.miserable < MISERY_WARN) {
+    s.flags.packing = 0;
+    return;
+  }
+  if (s.miserable < MISERY_QUIT) {
+    if (!s.flags.packing) log(s, `${worstOff(s).name} is packing a bag. Turn the mood around or they're gone by morning.`, 'bad');
+    s.flags.packing = 1;
+    return;
+  }
+  if (s.crew.length === 1 && !s.flags.lastChance) {
+    s.flags.lastChance = 1;
+    pushModal(s, {
+      title: 'Last One in the Ceiling',
+      art: 'intro',
+      body: `${s.crew[0].name} has their bag packed and one foot on the ladder. The bus station has heat. It has a vending machine.\n\nThen again, so does this place.`,
+      choices: [{ label: 'Stay. Give it one more week.', action: 'laststand' }],
+    });
+    return;
+  }
+  crewLeaves(s, worstOff(s), 'The mood up here has been miserable for days. "I\'d rather sleep in the bus station."');
+  s.miserable = 8;
+  s.flags.packing = 0;
+}
+
+function heistAftermath(s: GameState) {
+  if (s.flags.zalezHit !== 1) return;
+  s.flags.zalezHit = 2;
+  const ri = LAYOUT.roomIndex['zalez'];
+  pa(s, 'Attention staff: Charm Diamond Centres will open late today. Police are on site.');
+  raiseSuspicion(s, 15, 'Charm Diamond Centres reported a break-in');
+  scheduleInspection(s, ri, 'sweep', 'Someone came through the ceiling at Charm.');
+}
+
+const PREMIUM_PER_DAY = [0, 0, 0, 250, 500];
+
+function developerPressure(s: GameState) {
+  const lvl = suspicionLevel(s.suspicion);
+  if (!s.flags.auctionKnown || !PREMIUM_PER_DAY[lvl]) {
+    s.flags.premiumWarned = 0;
+    return;
+  }
+  s.bidPremium += PREMIUM_PER_DAY[lvl];
+  if (s.flags.premiumWarned) return;
+  s.flags.premiumWarned = 1;
+  log(s, 'Prestige Lifestyle heard there are squatters in the ceiling. They raised their bid.', 'bad');
+}
+
+const names = (crew: Crew[]) => crew.map((c) => c.name).join(' and ');
+
+function morningReport(s: GameState) {
+  const reasons = Object.entries(s.tally.suspicion)
+    .filter(([, t]) => t.amount >= 0.5)
+    .sort((a, b) => b[1].amount - a[1].amount);
+  const gained = reasons.reduce((a, [, t]) => a + t.amount, 0);
+  const present = s.crew.filter((c) => c.state !== 'away');
+  const hot = present.filter((c) => c.heat >= 60);
+  const empty = present.filter((c) => c.energy < 20);
+  const lines = [`Morning report: $${Math.round(s.todayIncome).toLocaleString()} came in yesterday.`];
+  for (const [reason, t] of reasons.slice(0, 3)) lines.push(`${reason}${t.count > 1 ? `, ${t.count} times` : ''}.`);
+  if (hot.length) lines.push(`Officer Dana keeps noticing ${names(hot)}.`);
+  if (empty.length) lines.push(`${names(empty)} ${empty.length === 1 ? 'is' : 'are'} running on empty.`);
+  log(s, lines.join(' '), gained >= 3 ? 'warn' : 'info');
+  s.tally = { suspicion: {} };
 }
 
 function onHour(s: GameState) {
@@ -273,8 +398,9 @@ function onHour(s: GameState) {
   runScript(s, day, hour);
   randomHourly(s, hour);
   if (hour === 8 && weekday(day) === 1) billReview(s);
+  if (hour === 8 && weekday(day) === 5) billPreview(s);
   if (s.business.popupRoom >= 0 && phaseAt(s.time) === 'open') {
-    const amt = Math.round(9 * crowdNow(s));
+    const amt = Math.round(POPUP_WALK_INS * crowdNow(s));
     if (amt > 0) earn(s, amt);
   }
   skimRackets(s);
@@ -365,10 +491,13 @@ export function tick(s: GameState, minutes: number) {
   s.rng = rand.state;
 }
 
+export const buildCost = (s: GameState, type: BuildId, x: number, y: number) => (type === 'raccoon' && inBounds(x, y) ? decoyPrice(s, LAYOUT.roomAt[idx(x, y)]) : BUILD[type].cost);
+
 export function placeObject(s: GameState, type: BuildId, x: number, y: number, flipped = false): string | null {
   const err = canPlace(s, type, x, y);
   if (err) return err;
-  const { cost, parts = 0 } = BUILD[type];
+  const { parts = 0 } = BUILD[type];
+  const cost = buildCost(s, type, x, y);
   if (s.cash < cost) return 'Not enough cash';
   if (s.parts < parts) return `Needs ${parts} parts`;
   s.cash -= cost;
@@ -387,6 +516,7 @@ export function placeObject(s: GameState, type: BuildId, x: number, y: number, f
     log(s, `${formed.def.name} is set up. ${formed.def.bonus}.`, 'good', { x, y, layer: 1 });
     sfx('good');
   }
+  if (type === 'out_of_order' && onPatrolRoute(x + 0.5, y + 0.5)) log(s, "Security walks right past this camera. The bag won't last long.", 'warn', { x, y, layer: 0 });
   return null;
 }
 
@@ -394,10 +524,21 @@ export function rotateObject(o: Placed) {
   if (canRotate(o.type)) o.flipped = !o.flipped;
 }
 
-export function demolishAt(s: GameState, x: number, y: number): string | null {
+export function moveObject(s: GameState, o: Placed, x: number, y: number): string | null {
+  if (BUILD[o.type].floor) return 'Floor gear stays where it was set up';
+  if (o.x === x && o.y === y) return null;
+  const err = canPlace(s, o.type, x, y, o);
+  if (err) return err;
+  o.x = x;
+  o.y = y;
+  markDirty();
+  return null;
+}
+
+export function demolishAt(s: GameState, x: number, y: number, layer: 0 | 1 = 1): string | null {
   const i = idx(x, y);
   const d = getDerived(s);
-  const obj = d.objAt.get(i);
+  const obj = (layer === 0 ? d.floorAt : d.objAt).get(i);
   if (obj) {
     s.objects = s.objects.filter((o) => o !== obj);
     s.cash += Math.floor(BUILD[obj.type].cost * 0.6);
@@ -406,6 +547,7 @@ export function demolishAt(s: GameState, x: number, y: number): string | null {
     markDirty();
     return null;
   }
+  if (layer === 0) return 'Nothing to remove';
   if (s.deck[i]) {
     if (s.crew.some((c) => c.layer === 1 && Math.floor(c.x) === x && Math.floor(c.y) === y)) return 'Someone is standing there';
     s.deck[i] = 0;
@@ -424,6 +566,17 @@ export function deckCount(s: GameState) {
 
 export const KIOSK_COST = 500;
 export const POPUP_COST = 1500;
+export const POPUP_RENT = 90;
+const POPUP_WALK_INS = 12;
+
+export function popupWalkIns(s: GameState): number {
+  const day = dayOf(s.time);
+  const hours = mallHours(day);
+  if (!hours) return 0;
+  let total = 0;
+  for (let h = Math.ceil(hours.open / 60); h < hours.close / 60; h++) total += Math.round(POPUP_WALK_INS * seasonFactor(day) * hourCurve(h * 60) * (0.5 + 0.6 * s.mallHealth));
+  return total;
+}
 export function leaseKiosk(s: GameState): string | null {
   if (s.business.kiosk) return 'Already leased';
   if (s.cash < KIOSK_COST) return 'Not enough cash';

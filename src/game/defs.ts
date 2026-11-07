@@ -108,13 +108,13 @@ const BUILDS_AS_WRITTEN: BuildDef[] = [
   { id: 'asbestos', name: 'Asbestos Warning Sign', category: 'stealth', cost: 40, level: 5, floor: true, deterRadius: 3, deterUses: 2, desc: 'Inspectors take one look and turn around. Good for two.', flavor: "DANGER. ASBESTOS. AUTHORIZED PERSONNEL ONLY. Laminated at Kinko's." },
   { id: 'wet_floor', name: 'Wet Floor Sign', category: 'stealth', cost: 15, level: 5, floor: true, lastsDays: 3, desc: 'Guards and the janitor walk around it.', flavor: 'CUIDADO. PISO MOJADO. Nobody questions the yellow sign.' },
   { id: 'out_of_order', name: 'Out of Order Bag', category: 'stealth', cost: 20, level: 7, floor: true, desc: 'Blinds a camera. Eventually someone looks up.', flavor: 'OUT OF ORDER. SORRY FOR THE INCONVENIENCE. — Management' },
-  { id: 'tamagotchi', name: 'Beeping Tamagotchi', category: 'stealth', cost: 30, level: 6, floor: true, desc: 'Beeps at night until a guard comes looking.', flavor: 'It needs feeding. It always needs feeding.' },
+  { id: 'tamagotchi', name: 'Beeping Tamagotchi', category: 'stealth', cost: 30, level: 6, floor: true, desc: 'Feed it at night and it beeps until a guard comes looking.', flavor: 'It needs feeding. It always needs feeding.' },
   { id: 'periscope', name: 'Periscope', category: 'stealth', cost: 90, parts: 15, level: 5, portable: true, periscope: true, desc: 'Bats below are harder to spot at night.', flavor: 'Two mirrors and a paper towel tube.' },
   { id: 'bunk', name: 'Bunk Bed', category: 'living', cost: 140, parts: 10, level: 6, beds: 2, comfort: 2, desc: '2 beds, +2 comfort.', flavor: 'Top bunk is a privilege.' },
   { id: 'xmas', name: 'String Lights', category: 'living', cost: 25, parts: 5, level: 6, portable: true, power: 6, comfort: 2, light: 2.8, lightColor: '255,120,120', desc: '+2 comfort.', flavor: 'Ceiling-core.' },
 
   { id: 'heater', name: 'Space Heater', category: 'living', cost: 50, parts: 10, level: 8, portable: true, power: 45, comfort: 5, seasonalComfort: true, light: 1.6, lightColor: '255,110,40', desc: '+5 comfort once it gets cold.', flavor: 'The ducts get cold in winter.' },
-  { id: 'scanner', name: 'Police Scanner', category: 'stealth', cost: 220, parts: 25, level: 8, portable: true, power: 10, unique: true, desc: 'Hear inspectors coming. They look less closely.', flavor: '"Unit 4, check the ceiling in West 49." Copy that, Unit 4.' },
+  { id: 'scanner', name: 'Police Scanner', category: 'stealth', cost: 220, parts: 25, level: 8, portable: true, power: 10, unique: true, desc: 'Every Suspicion hit lands a little softer.', flavor: '"Unit 4, check the ceiling in West 49." Copy that, Unit 4.' },
   { id: 'battery', name: 'Car Battery Bank', category: 'structure', cost: 320, parts: 40, level: 8, supply: 200, radius: 6, offGrid: true, desc: 'Powers 200W. No store gets the bill.', flavor: 'Six Die-Hards and an inverter from The Source.' },
   { id: 'pod', name: 'Soundproof Pod', category: 'stealth', cost: 340, parts: 20, level: 8, insulation: 0.85, insulationRadius: 2, desc: 'Swallows nearly all the noise around it.', flavor: 'Moving blankets. Lots of moving blankets.' },
 
@@ -152,7 +152,13 @@ export type JobId =
   | 'lostfound'
   | 'gary'
   | 'stockroom'
-  | 'tinker';
+  | 'tinker'
+  | 'listings'
+  | 'scrap'
+  | 'rig'
+  | 'lookout'
+  | 'zalez'
+  | 'doorbuster';
 
 export type Stat = 'stealth' | 'charm' | 'handy';
 
@@ -161,6 +167,8 @@ export interface JobDef {
   name: string;
   shift: 'day' | 'night' | 'both';
   spot?: SpotId;
+  home?: BuildId[];
+  only?: [month: number, day: number];
   level: number;
   stat: Stat;
   cycle: number;
@@ -187,8 +195,16 @@ export const JOBS: JobDef[] = [
   { id: 'stockroom', name: 'Stockroom Pilfer', shift: 'night', spot: 'stockroom', level: 2, stat: 'stealth', cycle: 25, sketch: 0, desc: 'Back-of-house overflow boxes. Busted electronics nobody will miss... much.', yields: 'Parts, sometimes goods', risk: 'low' },
   { id: 'pallets', name: 'Dock Pallets', shift: 'night', spot: 'pallets', level: 4, stat: 'handy', cycle: 25, sketch: 0, desc: 'Return-to-vendor pallets from Future Shop. Nobody inventories broken stuff.', yields: 'Parts', risk: 'low' },
   { id: 'lostfound', name: 'Lost & Found Raid', shift: 'night', spot: 'lostfound', level: 7, stat: 'stealth', cycle: 45, sketch: 0, desc: 'Inside the Security Office. While Gary is out on patrol.', yields: 'Goods, $, parts', risk: 'high' },
-  { id: 'tinker', name: 'Tinker at Workbench', shift: 'both', level: 4, stat: 'handy', cycle: 90, sketch: 0, desc: 'Parts in, goods out. Loud.', yields: 'Parts → Goods', risk: 'none' },
+  { id: 'zalez', name: 'The Charm Job', shift: 'night', spot: 'zalez', level: 9, stat: 'stealth', cycle: 60, sketch: 0, desc: 'Rope down into Charm Diamond Centres and empty one display case.', yields: '$$$$, once', risk: 'high' },
+  { id: 'doorbuster', name: 'Hold a Spot in Line', shift: 'day', spot: 'doorbuster', only: [11, 26], level: 1, stat: 'charm', cycle: 20, sketch: 0, desc: 'Shoppers pay cash to skip the Future Shop doorbuster line.', yields: '$$', risk: 'low' },
+  { id: 'tinker', name: 'Tinker at Workbench', shift: 'both', home: ['workbench'], level: 4, stat: 'handy', cycle: 75, sketch: 0, desc: 'Parts in, goods out. Loud.', yields: 'Parts → Goods', risk: 'none' },
+  { id: 'scrap', name: 'Sort the Haul', shift: 'both', home: ['crate'], level: 3, stat: 'handy', cycle: 30, sketch: 0, desc: 'Strip junk parts for copper. Earl buys it for his brother-in-law.', yields: 'Parts → $', risk: 'none' },
+  { id: 'rig', name: 'Rig the Meters', shift: 'both', home: ['splice'], level: 4, stat: 'handy', cycle: 45, sketch: 0, desc: 'Fiddle with a splice so the meter downstairs reads low.', yields: 'Smaller power bill', risk: 'none' },
+  { id: 'lookout', name: 'Periscope Lookout', shift: 'night', home: ['periscope'], level: 5, stat: 'stealth', cycle: 30, sketch: 0, desc: 'Watch the flashlights and whisper directions down the vent.', yields: 'Bats below are harder to spot', risk: 'none' },
+  { id: 'listings', name: 'Write eBay Listings', shift: 'both', home: ['pc'], level: 7, stat: 'charm', cycle: 30, sketch: 0, desc: '"VINTAGE!! L@@K!! RARE." Good copy sells faster.', yields: 'Faster eBay sales', risk: 'none' },
 ];
+
+export const isHomeJob = (job: JobId) => !!JOB[job].home;
 
 export const JOB: Record<JobId, JobDef> = Object.fromEntries(JOBS.map((j) => [j.id, j])) as Record<JobId, JobDef>;
 
@@ -345,7 +361,7 @@ export function unlocksAt(level: number): string[] {
     ...BUILDS.filter((b) => b.level === level).map((b) => b.name),
     ...(level === KIOSK_LEVEL ? ['Kiosk lease'] : []),
     ...(level === POPUP_LEVEL ? ['Pop-up lease'] : []),
-    ...JOBS.filter((j) => j.level === level && j.id !== 'rest').map((j) => `${j.name} job`),
+    ...JOBS.filter((j) => j.level === level && j.id !== 'rest' && !j.only).map((j) => `${j.name} job`),
   ];
 }
 
@@ -354,5 +370,5 @@ export const SUSPICION_LEVELS = [
   { at: 20, name: 'Watchful', desc: 'Extra cameras installed.' },
   { at: 40, name: 'Concerned', desc: 'A second night guard sweeps the stores.' },
   { at: 60, name: 'Alarmed', desc: 'K-9 unit. Guards spot you faster.' },
-  { at: 80, name: 'Lockdown', desc: 'Motion sensors in the concourse. One more slip and they sweep the ceiling.' },
+  { at: 80, name: 'Lockdown', desc: 'Motion sensors in the concourse. One more store complaint and the police sweep the ceiling.' },
 ];

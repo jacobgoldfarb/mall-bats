@@ -1,6 +1,6 @@
 import { log } from './ops';
 import type { Crew, GameState } from './state';
-import { dayOf, md } from './time';
+import { dayOf, isCold } from './time';
 import { getDerived } from './world';
 
 export const FOOD_PRICE = 4;
@@ -28,11 +28,6 @@ const portions = (c: Crew) => (c.traits.includes('glutton') ? 1.5 : 1);
 
 export function mealNeed(s: GameState): number {
   return Math.ceil(present(s).reduce((sum, c) => sum + portions(c), 0));
-}
-
-export function daysOfFood(s: GameState): number {
-  const need = mealNeed(s);
-  return need ? s.food / (need * MEAL_HOURS.length) : Infinity;
 }
 
 export function addMood(s: GameState, amount: number) {
@@ -87,7 +82,7 @@ export function moodTarget(s: GameState): number {
   const jolly = crew.some((c) => c.traits.includes('jolly')) ? 6 : 0;
   const bedless = crew.filter((c) => c.bedId < 0).length / count;
   const overworked = crew.filter(isOverworked).length / count;
-  const cold = md(dayOf(s.time))[0] === 12 && !s.objects.some((o) => o.type === 'heater' && o.powered);
+  const cold = isCold(dayOf(s.time)) && !s.objects.some((o) => o.type === 'heater' && o.powered);
   let target = 38 + comfortPer + jolly - 14 * bedless - 24 * overworked;
   if (s.missedMeals > 0) target -= 12 + 8 * Math.min(2, s.missedMeals);
   if (cold) target -= 10;

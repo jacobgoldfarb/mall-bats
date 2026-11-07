@@ -1,6 +1,6 @@
-import { app, focusTile, refresh, selectBuild, selectObject, SPEEDS, toast } from '../app';
+import { app, focusTile, refresh, selectBuild, selectObject, startMove, SPEEDS, toast } from '../app';
 import { audio } from '../audio/audio';
-import { assignedJob, currentJob, jobUnavailable, restCrew, shiftNow } from '../game/crew';
+import { assignedJob, callAllHome, callOff, currentJob, jobUnavailable, shiftKey, shiftNow } from '../game/crew';
 import {
   SUSPICION_LEVELS,
   BUILD,
@@ -19,16 +19,17 @@ import {
   canRotate,
   type BuildCategory,
 } from '../game/defs';
-import { resolveModal } from '../game/events';
-import { forecastInspection, forecastLabel, signUsesLeft, type InspectionForecast } from '../game/inspect';
+import { resolveModal, showVisitor } from '../game/events';
+import { INSPECTORS, coverInspection, forecastInspection, forecastLabel, garyCanCover, signUsesLeft, type InspectionForecast } from '../game/inspect';
 import { LAYOUT, C_DUCT, C_AC, C_SKYLIGHT, C_NONE, idx, inBounds } from '../game/layout';
-import { FOOD_PRICE, LOW_MOOD, daysOfFood, mealNeed, moodStatBonus, moodTarget } from '../game/needs';
+import { FOOD_PRICE, LOW_MOOD, MEAL_HOURS, mealNeed, moodStatBonus, moodTarget } from '../game/needs';
+import { feedBlocked, feedTamagotchi } from '../game/npc';
 import { OBJECTIVES, objectiveProgress } from '../game/objectives';
 import { ACHIEVEMENTS, suspicionDecay, suspicionLevel, auctionBid, levelOf } from '../game/ops';
-import { KIOSK_COST, POPUP_COST, POWER_MULT, buyFood, clearJam, demolishAt, leaseKiosk, noiseField, openPopup, popupName, rotateObject } from '../game/sim';
-import type { Crew, GameState, Inspection, InspectionKind, Placed } from '../game/state';
-import { AUCTION_DAY, dayOf, formatClock, formatDate, phaseAt, phaseLabel } from '../game/time';
-import { boundariesSignal, getDerived } from '../game/world';
+import { KIOSK_COST, POPUP_COST, POPUP_RENT, buildCost, buyFood, clearJam, demolishAt, leaseKiosk, noiseField, openPopup, popupName, popupWalkIns, powerCap, rotateObject } from '../game/sim';
+import type { Crew, GameState, Inspection, Placed } from '../game/state';
+import { AUCTION_DAY, dayOf, formatClock, formatDate, morningOf, phaseAt, phaseLabel } from '../game/time';
+import { getDerived, wifiAt } from '../game/world';
 import { crewSprite } from '../render/renderer';
 import { Icon } from './icons';
 import { Delta } from './delta';
@@ -173,8 +174,8 @@ function suspicionTitle(lvl: number): string {
 }
 
 function FoodStat({ s, cap, fridge }: { s: GameState; cap: number; fridge: boolean }) {
-  const days = daysOfFood(s);
   const hungry = s.missedMeals > 0;
+  const appetite = mealNeed(s) * MEAL_HOURS.length;
   const title = [`${mealNeed(s)} portions at 8 AM and 8 PM.`, fridge ? '' : 'Spoils without a fridge.'].filter(Boolean).join('\n');
   return (
     <div class={`stat food ${hungry ? 'empty' : s.food >= cap ? 'full' : ''}`} title={`${title}\nClick to stock up.`} onClick={() => ((app.buildOpen = true), (app.buildCategory = 'food'), refresh())}>
@@ -182,7 +183,7 @@ function FoodStat({ s, cap, fridge }: { s: GameState; cap: number; fridge: boole
       <div>
         <b>{Math.floor(s.food)}</b>
         <Delta value={s.food} scope={s} />
-        <small>{hungry ? 'HUNGRY' : days === Infinity ? `FOOD /${cap}` : `${days < 10 ? days.toFixed(1) : Math.floor(days)} DAYS`}</small>
+        <small>{hungry ? 'HUNGRY' : `-${appetite} / DAY`}</small>
       </div>
     </div>
   );
@@ -296,6 +297,7 @@ export function BuildPanel({ s }: { s: GameState }) {
                     {b.name}
                     <b class={cant ? 'bad' : ''}>
                       ${b.cost}
+                      {b.decoy && s.rooms.some((r) => r.decoys > 0) ? '+' : ''}
                       {b.parts ? (
                         <span class={`part-cost ${s.parts < b.parts ? 'short' : ''}`}>
                           {' + '}
@@ -415,7 +417,12 @@ function BusinessCards({ s }: { s: GameState }) {
         <h4>
           <Icon name="goods" /> Seasonal Pop-Up
         </h4>
-        <p>Open shop in a dead storefront. Holiday shoppers pay anything. ${POPUP_COST}, then $90/day.</p>
+        <p>Open shop in a dead storefront. Holiday shoppers pay anything. ${POPUP_COST}, then ${POPUP_RENT}/day.</p>
+        {level >= POPUP_LEVEL && (
+          <p class={popupWalkIns(s) < POPUP_RENT ? 'bad' : 'good'}>
+            Walk-ins today: about ${popupWalkIns(s)}.
+          </p>
+        )}
         {s.business.popupRoom >= 0 ? (
           <div class="ok-line">
             ✓ {popupName(s)} in the old {LAYOUT.rooms[s.business.popupRoom].name}
@@ -446,9 +453,17 @@ function BusinessCards({ s }: { s: GameState }) {
   );
 }
 
+export function allHome(s: GameState) {
+  const n = callAllHome(s);
+  if (n) audio.play('climb');
+  else toast('Nobody is out in the mall', 'info');
+  refresh();
+}
+
 export function CrewPanel({ s }: { s: GameState }) {
   const beds = getDerived(s).beds.reduce((a, b) => a + b.slots, 0);
   const shortBeds = s.crew.length > beds;
+  const out = s.crew.filter((c) => c.layer === 0 && c.state !== 'away').length;
   return (
     <div class="crewpanel panel">
       <div class="panel-head">
@@ -456,9 +471,11 @@ export function CrewPanel({ s }: { s: GameState }) {
         <button class="btn small" onClick={() => openJobs(app.view.selectedCrew ?? app.crewExpanded, shiftNow(s) ?? undefined)}>
           Job Board<kbd>J</kbd>
         </button>
-        <small class={shortBeds ? 'warn' : ''} title={shortBeds ? 'Not enough beds for everyone. Build more in the Home tab.' : undefined}>
+        <button class={`btn small ${out ? 'danger' : 'ghost'}`} disabled={!out} onClick={() => allHome(s)} title="Everyone in the mall drops what they're doing and comes home. They're off for the rest of the shift.">
+          All home<kbd>G</kbd>
+        </button>
+        <small class={shortBeds ? 'warn' : ''}>
           {beds} {beds === 1 ? 'BED' : 'BEDS'}
-          {shortBeds ? ' · NEED MORE' : ''}
         </small>
       </div>
       <div class="crew-list">
@@ -466,16 +483,25 @@ export function CrewPanel({ s }: { s: GameState }) {
           <CrewCard s={s} c={c} expanded={app.crewExpanded === c.id} />
         ))}
       </div>
+      {s.ladder.map((v) => (
+        <button class="ladder-row" onClick={() => (showVisitor(s, v), refresh())} title="Someone is waiting at the ladder.">
+          <Portrait look={v.candidate.look} sprite={crewSprite(v.candidate.archetype)} size={22} />
+          <span>
+            {v.candidate.name} is waiting at the ladder · until {formatDate(dayOf(v.until))}
+          </span>
+        </button>
+      ))}
       {levelOf(s) >= JOB.gary.level && !s.gary.recruited && <GaryRow s={s} />}
     </div>
   );
 }
 
 function GaryRow({ s }: { s: GameState }) {
+  const insiderText = `Gary is your man on the inside.${garyCanCover(s) ? ' He can lose one inspection this week.' : ''}`;
   return (
-    <div class="gary-row" title="Leave him NY Fries at night.">
+    <div class="gary-row" title={s.gary.insider ? undefined : 'Leave him NY Fries at night.'}>
       <Icon name="art.gary" size={16} />
-      <span>{s.gary.insider ? 'Gary is your man on the inside.' : `Gary's goodwill · ${Math.round(s.gary.affinity)}/100`}</span>
+      <span>{s.gary.insider ? insiderText : `Gary's goodwill · ${Math.round(s.gary.affinity)}/100`}</span>
       {!s.gary.insider && <Bar value={s.gary.affinity} color="linear-gradient(90deg,#ffb000,#ff4fa3)" />}
     </div>
   );
@@ -504,7 +530,7 @@ function JobSummary({ s, c }: { s: GameState; c: Crew }) {
 }
 
 function heatTitle(c: Crew): string {
-  return `How well security knows ${c.name}'s face. At 100%, Officer Dana makes an arrest. A day of Rest cools it.`;
+  return `How well security knows ${c.name}'s face. At 100%, Officer Dana makes an arrest. A day at home cools it.`;
 }
 
 function awayText(s: GameState, c: Crew): string {
@@ -580,9 +606,9 @@ function CrewCard({ s, c, expanded }: { s: GameState; c: Crew; expanded: boolean
             <button class="btn small" onClick={() => openJobs(c.id, shiftNow(s) ?? undefined)}>
               Jobs<kbd>J</kbd>
             </button>
-            {(c.layer === 0 || assignedJob(s, c) !== 'rest') && (
-              <button class="btn small danger" onClick={() => (restCrew(s, c), refresh())} title="Off the clock for this shift">
-                Rest
+            {shiftNow(s) && c.calledOff !== shiftKey(s) && (c.layer === 0 || assignedJob(s, c) !== 'rest') && (
+              <button class="btn small danger" onClick={() => (callOff(s, c), refresh())} title="Comes home and sits out the rest of this shift.">
+                {c.layer === 0 ? 'Call home' : 'Off this shift'}
               </button>
             )}
             <span class="muted">
@@ -648,10 +674,8 @@ export function ObjectiveCard({ s }: { s: GameState }) {
   );
 }
 
-const INSPECTOR: Record<InspectionKind, string> = { complaint: 'Maintenance', power: 'Electrician', pest: 'Pest control', fire: 'Fire marshal', sweep: 'Ceiling sweep' };
-
 const isClean = (f: InspectionForecast) => f.verdict !== 'search' || (!f.confiscated.length && !f.deckTiles.length);
-const whenText = (s: GameState, ins: Inspection) => (ins.state === 'scheduled' ? `${dayOf(ins.at) === dayOf(s.time) ? 'today' : 'tomorrow'} ${formatClock(ins.at)}` : 'on the way now');
+const whenText = (s: GameState, ins: Inspection) => (ins.state === 'scheduled' ? `${morningOf(dayOf(s.time), dayOf(ins.at)).replace(' morning', '')} ${formatClock(ins.at)}` : 'on the way now');
 
 export function InspectionPanel({ s }: { s: GameState }) {
   const upcoming = s.inspections.filter((i) => i.state !== 'done').sort((a, b) => a.at - b.at);
@@ -674,25 +698,30 @@ export function InspectionPanel({ s }: { s: GameState }) {
       </button>
       {open && (
         <div class="insp-list">
-          {s.excuseFatigue > 0.01 && <small class="warn">EXCUSES WEARING THIN +{Math.round(s.excuseFatigue * 100)}</small>}
           {upcoming.map((ins, k) => {
             const f = forecasts[k];
             return (
               <div class={`insp ${isClean(f) ? 'clean' : ''}`} onClick={() => (focusTile(ins.x, ins.y, 1), refresh())} title="Click to look">
                 <div class="insp-head">
                   <b>
-                    {INSPECTOR[ins.kind]} · {LAYOUT.rooms[ins.room].name}
+                    {INSPECTORS[ins.kind].label} · {LAYOUT.rooms[ins.room].name}
                   </b>
                   <span>{whenText(s, ins)}</span>
                 </div>
-                <div class="insp-sus" title="How closely they'll look.">
-                  <span class="label">SCRUTINY</span>
-                  <div class="sus-track">
-                    <div class="sus-fill" style={{ width: `${f.scrutiny * 100}%` }} />
-                  </div>
-                  <b>{Math.round(f.scrutiny * 100)}%</b>
-                </div>
                 <div class={isClean(f) ? 'good' : 'bad'}>{forecastLabel(f)}</div>
+                {garyCanCover(s) && ins.state === 'scheduled' && (
+                  <button
+                    class="btn small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      coverInspection(s, ins);
+                      refresh();
+                    }}
+                    title="Once a week"
+                  >
+                    Ask Gary to lose this one
+                  </button>
+                )}
               </div>
             );
           })}
@@ -776,7 +805,8 @@ export function BottomBar({ s }: { s: GameState }) {
       {(app.view.overlay === 'noise' || app.view.overlay === 'smell') && <HeatLegend s={s} kind={app.view.overlay} />}
       {app.view.build ? (
         <div class="hint active">
-          Placing {BUILD[app.view.build].name}. {app.view.build === 'deck' || app.view.build === 'foam' ? 'Drag to lay many. ' : ''}
+          {app.view.moving !== null ? 'Moving' : 'Placing'} {BUILD[app.view.build].name}. {app.view.moving === null && (app.view.build === 'deck' || app.view.build === 'foam') ? 'Drag to lay many. ' : ''}
+          {app.view.build === 'raccoon' && app.view.hover && inBounds(app.view.hover.x, app.view.hover.y) && <PlacementPrice s={s} />}
           {canRotate(app.view.build) && (
             <span>
               <kbd>R</kbd>rotate
@@ -814,6 +844,19 @@ export function BottomBar({ s }: { s: GameState }) {
   );
 }
 
+function PlacementPrice({ s }: { s: GameState }) {
+  const { x, y } = app.view.hover!;
+  const ri = LAYOUT.roomAt[idx(x, y)];
+  if (ri < 0) return null;
+  const price = buildCost(s, 'raccoon', x, y);
+  return (
+    <b class={price > BUILD.raccoon.cost ? 'warn' : ''}>
+      {money(price)} above {LAYOUT.rooms[ri].name}
+      {price > BUILD.raccoon.cost ? ". They've heard this one before." : '.'}{' '}
+    </b>
+  );
+}
+
 export function Tooltip({ s }: { s: GameState }) {
   const h = app.view.hover;
   const sc = app.hoverScreen;
@@ -832,7 +875,7 @@ export function Tooltip({ s }: { s: GameState }) {
     else if (ck === C_SKYLIGHT) lines.push('Skylight: everyone below would see you');
     else if (ck === C_NONE) lines.push(r.kind === 'anchor' ? 'Anchor store firewall: no access' : 'No ceiling access');
   }
-  const cap = r.powerCap * POWER_MULT[s.difficulty];
+  const cap = powerCap(s, ri);
   return (
     <div class="tooltip" style={{ left: `${(sc.x + 18) / app.uiScale}px`, top: `${(sc.y + 18) / app.uiScale}px` }}>
       <div class="tt-head">
@@ -855,6 +898,12 @@ export function Tooltip({ s }: { s: GameState }) {
           <b class={rs.power > cap ? 'bad' : ''}>
             {rs.power.toFixed(1)} / {cap.toFixed(0)} kWh
           </b>
+          {r.kind === 'store' && rs.strain >= 1 && (
+            <>
+              <span>Manager</span>
+              <b class="bad">{rs.strain >= 2 ? 'Talking about leaving' : 'Fed up'}</b>
+            </>
+          )}
         </div>
       )}
       {app.view.layer === 1 && noiseField[idx(h.x, h.y)] > 0.05 && (
@@ -874,7 +923,7 @@ export function Tooltip({ s }: { s: GameState }) {
         <div class="tt-line">
           <b>{BUILD[obj.type].name}</b> {BUILD[obj.type].power ? obj.powered ? <span class="good">· powered</span> : <span class="bad">· no power</span> : ''}
           {BUILD[obj.type].supply ? ` · ${obj.supplyLoad}/${BUILD[obj.type].supply}W` : ''}
-          {obj.type === 'pc' ? ` · Wi-Fi ${Math.round(boundariesSignal(obj.x, obj.y) * 100)}%` : ''}
+          {obj.type === 'pc' ? ` · Wi-Fi ${Math.round(wifiAt(s, obj.x, obj.y) * 100)}%` : ''}
         </div>
       )}
     </div>
@@ -892,6 +941,7 @@ function objectUsage(s: GameState, o: Placed, roomName: string): string[] {
     const user = s.crew.find((c) => c.useObj === o.id && c.state === 'working');
     return [user ? `${user.name} is tinkering.` : 'Free.'];
   }
+  if (o.type === 'tamagotchi') return [!o.delivered ? 'Waiting for someone to carry it down.' : o.beeping ? 'Beeping. Someone will come looking.' : 'Quiet. Feed it after hours to start the beeping.'];
   if (def.racket) {
     if (o.jammed) return ['Jammed. Earning nothing until cleared.'];
     if (!o.powered) return ['Unpowered. Earning nothing.'];
@@ -909,6 +959,7 @@ export function SelectedObject({ s }: { s: GameState }) {
   if (!o) return null;
   const def = BUILD[o.type];
   const room = LAYOUT.rooms[LAYOUT.roomAt[idx(o.x, o.y)]];
+  const layer = def.floor ? 0 : 1;
   return (
     <div class="selobj panel">
       <div class="panel-head">
@@ -921,7 +972,9 @@ export function SelectedObject({ s }: { s: GameState }) {
         <BuildIcon type={o.type} size={56} />
         <div>
           <div>{def.desc}</div>
-          <div class="muted">Above {room.name}</div>
+          <div class="muted">
+            {layer ? 'Above' : 'In'} {room.name}
+          </div>
           {def.power && <div class={o.powered ? 'good' : 'bad'}>{o.powered ? 'Powered' : 'Unpowered: build a Power Splice within range'}</div>}
           {def.supply && (
             <div>
@@ -946,15 +999,25 @@ export function SelectedObject({ s }: { s: GameState }) {
               Clear jam (5 parts)
             </button>
           )}
-          {canRotate(o.type) && (
+          {o.type === 'tamagotchi' && (
+            <button class="btn small" disabled={!!feedBlocked(s, o)} title={feedBlocked(s, o) ?? 'Starts the beeping. The nearest guard comes looking.'} onClick={() => (feedTamagotchi(s, o), refresh())}>
+              Feed it
+            </button>
+          )}
+          {canRotate(o.type) && !def.floor && (
             <button class="btn small" onClick={() => (rotateObject(o), audio.play('click'), refresh())}>
               Rotate<kbd>R</kbd>
+            </button>
+          )}
+          {!def.floor && (
+            <button class="btn small" onClick={() => (startMove(o), refresh())} title="Pick it up and set it down somewhere else. Free.">
+              Move<kbd>M</kbd>
             </button>
           )}
           <button
             class="btn small danger"
             onClick={() => {
-              demolishAt(s, o.x, o.y);
+              demolishAt(s, o.x, o.y, layer);
               selectObject(null);
               audio.play('demolish');
               refresh();
@@ -973,12 +1036,13 @@ const ART = new Set(['intro', 'news', 'caught', 'gary', 'feast', 'wallet', 'mann
 export function ModalView({ s }: { s: GameState }) {
   const m = s.modals[0];
   if (!m) return null;
+  const visitor = s.ladder.find((v) => v.id === m.data?.visitor)?.candidate;
   return (
     <div class="modal-wrap">
       <div class="modal panel">
         <div class={`modal-art art-${m.art ?? 'none'}`}>
-          {m.art === 'recruit' && s.candidate ? (
-            <Portrait look={s.candidate.look} sprite={crewSprite(s.candidate.archetype)} size={96} bg="#48298a" />
+          {m.art === 'recruit' && visitor ? (
+            <Portrait look={visitor.look} sprite={crewSprite(visitor.archetype)} size={96} bg="#48298a" />
           ) : (
             <Icon name={`art.${ART.has(m.art ?? '') ? m.art : 'pager'}`} size={128} />
           )}
@@ -1055,6 +1119,24 @@ export function Toasts() {
   );
 }
 
+const GRADES = [
+  { min: 0.5, grade: 'S', name: 'Mall Mogul' },
+  { min: 0.2, grade: 'A', name: 'Comfortable' },
+  { min: 0.05, grade: 'B', name: 'Close enough' },
+  { min: 0, grade: 'C', name: 'By a nose' },
+];
+
+function WinGrade({ s }: { s: GameState }) {
+  const margin = s.over?.margin;
+  if (margin === undefined) return null;
+  const g = GRADES.find((x) => margin >= x.min)!;
+  return (
+    <div class="grade">
+      Grade <b>{g.grade}</b> · {g.name} · won by {Math.round(margin * 100)}%{s.stats.caught === 0 ? ' · nobody ever got caught' : ''}
+    </div>
+  );
+}
+
 export function GameOver({ s, onMenu, onNew }: { s: GameState; onMenu: () => void; onNew: () => void }) {
   const o = s.over!;
   const max = Math.max(50, ...s.dailyIncome);
@@ -1062,6 +1144,7 @@ export function GameOver({ s, onMenu, onNew }: { s: GameState; onMenu: () => voi
     <div class="modal-wrap over">
       <div class={`modal panel gameover ${o.won ? 'won' : 'lost'}`}>
         <h1>{o.title}</h1>
+        <WinGrade s={s} />
         <div class="modal-body">{o.text.split('\n').map((p) => (p ? <p>{p}</p> : <br />))}</div>
         <div class="chart">
           {s.dailyIncome.map((v) => (
@@ -1083,12 +1166,16 @@ export function GameOver({ s, onMenu, onNew }: { s: GameState; onMenu: () => voi
           </b>
           <span>Inspections survived</span>
           <b>{s.stats.inspections}</b>
+          <span>Inspections dodged</span>
+          <b>{s.stats.inspectionsFoundNothing + s.stats.raccoons}</b>
           <span>Raccoons blamed</span>
           <b>{s.stats.raccoons}</b>
           <span>Times spotted / caught</span>
           <b>
             {s.stats.spotted} / {s.stats.caught}
           </b>
+          <span>Longest clean streak</span>
+          <b>{s.stats.bestNightStreak} nights</b>
           <span>Stores that closed</span>
           <b>{s.stats.storesClosed}</b>
         </div>

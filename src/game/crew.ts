@@ -1,4 +1,4 @@
-import { ARCHETYPES, BUILD, FIRST_NAMES, JOB, JOBS, LOT, NOOK_SLEEP_SPEED, NOOK_TINKER_SPEED, type JobDef, type JobId } from './defs';
+import { ARCHETYPES, BUILD, FIRST_NAMES, JOB, LOT, NOOK_SLEEP_SPEED, NOOK_TINKER_SPEED, isHomeJob, type JobId } from './defs';
 import { LAYOUT, N, W, idx, inBounds } from './layout';
 import { addSharedMood, stat, workMult } from './needs';
 import { earn, levelOf, log, pressure, rand, raiseSuspicion, sfx, unlock } from './ops';
@@ -76,7 +76,6 @@ export function addCrew(s: GameState, c: Candidate, at?: { x: number; y: number;
     heat: 0,
     dayJob: 'rest',
     nightJob: 'rest',
-    fillIn: false,
     activeJob: 'rest',
     jobCooldown: {},
     state: 'idle',
@@ -92,7 +91,7 @@ export function addCrew(s: GameState, c: Candidate, at?: { x: number; y: number;
     thought: 'Settling in',
     spottedBy: -1,
     waitUntil: 0,
-    recall: false,
+    calledOff: '',
     hiding: false,
     replanAt: 0,
     camWait: 0,
@@ -170,43 +169,79 @@ export function shiftNow(s: GameState): 'day' | 'night' | null {
   return p === 'open' ? 'day' : p === 'night' ? 'night' : null;
 }
 
+export const shiftKey = (s: GameState) => `${dayOf(s.time - 360)}:${shiftNow(s)}`;
+
 export function assignedJob(s: GameState, c: Crew): JobId {
   const sh = shiftNow(s);
   return sh === 'day' ? c.dayJob : sh === 'night' ? c.nightJob : 'rest';
 }
 
-const SAFE_ENOUGH_TO_FILL_IN: Record<'day' | 'night', JobDef['risk'][]> = { day: ['none', 'low'], night: ['none'] };
-const NEVER_FILL_IN: JobId[] = ['rest', 'gary', 'boundaries'];
-
-export function fillInJob(s: GameState, c: Crew): JobId {
-  const sh = shiftNow(s);
-  if (!sh) return 'rest';
-  const open = JOBS.filter((j) => (j.shift === sh || j.shift === 'both') && SAFE_ENOUGH_TO_FILL_IN[sh].includes(j.risk) && !NEVER_FILL_IN.includes(j.id) && !jobUnavailable(s, c, j.id));
-  const score = (j: JobDef) => c[j.stat] + (j.risk === 'none' ? 1 : 0);
-  return open.sort((a, b) => score(b) - score(a))[0]?.id ?? 'rest';
-}
+export const TOO_TIRED = 'Too tired to work';
+const TIRED_ENERGY = 10;
+export const MAX_PER_SPOT = 2;
 
 export function jobUnavailable(s: GameState, c: Crew, job: JobId): string | null {
-  if (job !== 'tinker' && c.waitUntil > s.time) return 'Lying low after being spotted';
+  if (c.energy < TIRED_ENERGY) return TOO_TIRED;
+  if (!isHomeJob(job) && c.waitUntil > s.time) return 'Lying low after being spotted';
   if ((c.jobCooldown[job] ?? 0) > s.time) return "Can't get there right now";
   return jobBlocked(s, c, job);
 }
 
 export function planJob(s: GameState, c: Crew): JobId {
   const job = assignedJob(s, c);
-  if (job === 'rest' || !jobUnavailable(s, c, job)) return job;
-  return 'rest';
+  if (c.calledOff === shiftKey(s) || job === 'rest' || jobUnavailable(s, c, job)) return 'rest';
+  return job;
 }
 
 export function currentJob(s: GameState, c: Crew): JobId {
-  const committed = (c.state === 'toWork' || c.state === 'working') && c.activeJob === assignedJob(s, c);
+  const committed = (c.state === 'toWork' || c.state === 'working') && c.calledOff !== shiftKey(s) && c.activeJob === assignedJob(s, c);
   return committed ? c.activeJob : planJob(s, c);
+}
+
+const othersOn = (s: GameState, c: Crew, job: JobId) => s.crew.filter((o) => o !== c && o.activeJob === job && (o.state === 'working' || o.state === 'toWork')).length;
+
+export const onlyToday = (s: GameState, job: JobId) => {
+  const only = JOB[job].only;
+  if (!only) return true;
+  const [m, d] = md(dayOf(s.time));
+  return m === only[0] && d === only[1];
+};
+
+const SCRAP_PARTS = 10;
+const RIGGABLE_KWH = 0.5;
+
+function homeObjectReady(s: GameState, job: JobId, o: Placed): boolean {
+  if (job === 'rig') return o.tapRoom >= 0 && s.rooms[o.tapRoom].power > RIGGABLE_KWH;
+  return true;
+}
+
+function homeObjects(s: GameState, c: Crew, job: JobId): Placed[] {
+  const types = JOB[job].home!;
+  return s.objects.filter((o) => types.includes(o.type) && o.powered && homeObjectReady(s, job, o) && !s.crew.some((x) => x !== c && x.useObj === o.id && x.state === 'working'));
+}
+
+function homeBlocked(s: GameState, c: Crew, job: JobId): string | null {
+  const types = JOB[job].home!;
+  const name = BUILD[types[0]].name;
+  const built = s.objects.filter((o) => types.includes(o.type));
+  if (!built.length) return `Needs a ${name}`;
+  if (!built.some((o) => o.powered)) return `The ${name} has no power`;
+  if (job === 'rig' && !built.some((o) => homeObjectReady(s, job, o))) return 'The meters already read low';
+  if (!homeObjects(s, c, job).length) return `Every ${name} is in use`;
+  return null;
 }
 
 export function jobBlocked(s: GameState, c: Crew, job: JobId): string | null {
   const def = JOB[job];
   if (levelOf(s) < def.level) return `Unlocks at Level ${def.level}`;
+  if (!onlyToday(s, job)) return 'Only on Black Friday';
+  if (def.spot && othersOn(s, c, job) >= MAX_PER_SPOT) return 'Two Bats are already on it';
+  if (def.home) {
+    const why = homeBlocked(s, c, job);
+    if (why) return why;
+  }
   const d = getDerived(s);
+  const closed = (id: string) => s.rooms[LAYOUT.roomIndex[id]].vacant;
   switch (job) {
     case 'kiosk':
       if (!s.business.kiosk) return 'Lease the kiosk first (Work tab)';
@@ -220,18 +255,35 @@ export function jobBlocked(s: GameState, c: Crew, job: JobId): string | null {
       if (s.goods < 1) return 'No goods to return';
       break;
     case 'tinker':
-      if (!d.workbenches.length) return 'Needs a powered Workbench';
-      if (!jobTarget(s, c, 'tinker')) return 'Every Workbench is taken';
       if (s.parts < 2 * LOT) return `Needs ${2 * LOT} parts`;
       if (s.goods >= d.goodsCap) return 'Goods storage full';
       break;
+    case 'scrap':
+      if (s.parts < SCRAP_PARTS) return `Needs ${SCRAP_PARTS} parts`;
+      break;
+    case 'listings':
+      if (d.pcSignal <= 0) return 'The PC has no Wi-Fi';
+      if (s.goods < 1) return 'No goods to list';
+      break;
     case 'gary':
       if (s.gary.recruited) return 'Gary is one of us now';
+      if (s.gary.insider) return "Gary's already on your side";
       if (s.food < 2) return 'Needs 2 food';
       if (s.flags.garyGiftDay === nightKey(s)) return 'Already left a gift tonight';
       break;
     case 'radiohut':
-      if (s.rooms[LAYOUT.roomIndex['radiohut']].vacant) return 'The Source has closed';
+      if (closed('radiohut')) return 'The Source has closed';
+      break;
+    case 'arcade':
+      if (closed('funzone')) return 'Galaxy has closed';
+      break;
+    case 'boundaries':
+      if (closed('boundaries')) return 'Coles has closed';
+      break;
+    case 'zalez':
+      if (closed('zalez')) return 'Charm has closed';
+      if ((s.pools.zalez ?? 0) <= 0) return 'Already cleaned out';
+      if (!s.objects.some((o) => o.type === 'rope' && LAYOUT.roomAt[idx(o.x, o.y)] === LAYOUT.roomIndex['zalez'])) return 'Needs a Rope Drop into Charm';
       break;
   }
   const pool = POOL_OF[job];
@@ -253,8 +305,6 @@ export const POOL_OF: Partial<Record<JobId, string>> = {
 
 const nightKey = (s: GameState) => dayOf(s.time - 360);
 
-const freeBenches = (s: GameState, c: Crew) => getDerived(s).workbenches.filter((b) => !s.crew.some((o) => o !== c && o.useObj === b.id && o.state === 'working'));
-
 const touching = (c: Crew, o: Placed) => Math.max(Math.abs(Math.floor(c.x) - o.x), Math.abs(Math.floor(c.y) - o.y)) <= 1;
 
 function faceObject(c: Crew, o: Placed) {
@@ -267,8 +317,8 @@ export function useSpots(s: GameState, o: Placed): number[] {
 
 export function jobTarget(s: GameState, c: Crew, job: JobId): number[] | null {
   const def = JOB[job];
-  if (job === 'tinker') {
-    const spots = freeBenches(s, c).flatMap((b) => besideTiles(s, b));
+  if (def.home) {
+    const spots = homeObjects(s, c, job).flatMap((o) => besideTiles(s, o));
     return spots.length ? spots : null;
   }
   if (job === 'popup') {
@@ -435,7 +485,6 @@ function doCycle(s: GameState, c: Crew, job: JobId): boolean {
       if (s.food < 2) return false;
       s.food -= 2;
       s.gary.affinity = Math.min(100, s.gary.affinity + 6 + stat(s, c, 'charm') * 2);
-      s.gary.gifts++;
       s.flags.garyGiftDay = nightKey(s);
       log(s, `${c.name} left a sleeve of NY Fries outside the Security Office. Gary's goodwill: ${s.gary.affinity.toFixed(0)}/100.`, 'good');
       return false;
@@ -462,7 +511,7 @@ function doCycle(s: GameState, c: Crew, job: JobId): boolean {
       const pro = has(c, 'returnspro');
       const got = Math.round(rand.range(50, 80) * (lot / LOT) * (pro ? 1.4 : 1) * (boxingDay ? 1.8 : 1));
       k.cash += got;
-      c.heat += pro ? 4 : 8;
+      addHeat(c, pro ? 4 : 8);
       c.bubble = { text: `+$${got}`, until: s.time + 8, tone: 'happy' };
       return s.goods > 0;
     }
@@ -470,7 +519,7 @@ function doCycle(s: GameState, c: Crew, job: JobId): boolean {
     case 'popup': {
       if (s.goods < 1) return false;
       const chance = (job === 'kiosk' ? 0.3 : 0.42) + stat(s, c, 'charm') * 0.08;
-      const attempts = job === 'popup' ? 2 : 1;
+      const attempts = (job === 'popup' ? 2 : 1) * (blackFriday ? 2 : 1);
       for (let i = 0; i < attempts && s.goods > 0; i++) {
         if (rand.chance(Math.min(0.95, chance * Math.min(1.5, crowd) * (has(c, 'salesman') ? 1.5 : 1)))) {
           const lot = Math.min(LOT, s.goods);
@@ -493,8 +542,55 @@ function doCycle(s: GameState, c: Crew, job: JobId): boolean {
       c.bubble = { text: `+${LOT} goods`, until: s.time + 8, tone: 'happy' };
       return s.parts >= 2 * LOT && s.goods < d2.goodsCap;
     }
+    case 'scrap': {
+      if (s.parts < SCRAP_PARTS) return false;
+      s.parts -= SCRAP_PARTS;
+      const got = 6 + stat(s, c, 'handy') * 2;
+      earn(s, got);
+      c.earned += got;
+      c.bubble = { text: `+$${got}`, until: s.time + 8, tone: 'happy' };
+      return s.parts >= SCRAP_PARTS;
+    }
+    case 'rig': {
+      const splice = s.objects.find((o) => o.id === c.useObj);
+      if (!splice || splice.tapRoom < 0) return false;
+      const rs = s.rooms[splice.tapRoom];
+      rs.power = Math.max(0, rs.power - (0.6 + stat(s, c, 'handy') * 0.3));
+      c.bubble = { text: 'meter ↓', until: s.time + 8, tone: 'happy' };
+      return rs.power > RIGGABLE_KWH;
+    }
+    case 'listings': {
+      if (s.goods < 1) return false;
+      s.ebayTimer += 20 + stat(s, c, 'charm') * 5;
+      return true;
+    }
+    case 'lookout':
+      return true;
+    case 'doorbuster': {
+      const got = Math.round((3 + stat(s, c, 'charm') * 2) * rand.range(0.7, 1.3));
+      k.cash += got;
+      c.bubble = { text: `+$${got}`, until: s.time + 8, tone: 'happy' };
+      return true;
+    }
+    case 'zalez': {
+      take('zalez', 1);
+      const got = Math.round((1600 + stat(s, c, 'stealth') * 250) * rand.range(0.9, 1.1));
+      k.cash += got;
+      k.goods += 10;
+      s.flags.zalezHit = 1;
+      c.bubble = { text: `+$${got}`, until: s.time + 10, tone: 'happy' };
+      log(s, `${c.name} emptied a display case at Charm Diamond Centres. Now get out.`, 'good', { x: Math.floor(c.x), y: Math.floor(c.y), layer: 0 });
+      sfx('cash');
+      return false;
+    }
   }
   return false;
+}
+
+export function lookoutMult(s: GameState): number {
+  const lookouts = s.crew.filter((c) => c.state === 'working' && c.activeJob === 'lookout');
+  if (!lookouts.length) return 0.7;
+  return 0.7 - 0.04 * Math.max(...lookouts.map((c) => stat(s, c, 'stealth')));
 }
 
 export function baseCycle(s: GameState, c: Crew, job: JobId): number {
@@ -582,6 +678,11 @@ function decide(s: GameState, c: Crew) {
   }
   if (c.energy > ERRAND_MIN_ENERGY && startErrand(s, c)) return;
   if (canWork) return startWork(s, c, job);
+  if (assignedJob(s, c) !== 'rest' && c.calledOff !== shiftKey(s) && jobUnavailable(s, c, assignedJob(s, c)) === TOO_TIRED) {
+    c.calledOff = shiftKey(s);
+    if (!s.flags[`tired_${c.id}`]) log(s, `${c.name} is too tired to go out. They're sleeping this shift off.`, 'warn', { x: Math.floor(c.x), y: Math.floor(c.y), layer: 1 });
+    s.flags[`tired_${c.id}`] = 1;
+  }
   const sleepy = c.energy < 40 || (phase === 'night' && c.energy < 92) || (phase !== 'open' && c.energy < 70);
   if (sleepy) return startSleep(s, c);
   startLeisure(s, c);
@@ -881,10 +982,10 @@ export function updateCrew(s: GameState, c: Crew, dt: number) {
         if (job !== c.activeJob || jobBlocked(s, c, job)) return decide(s, c);
         c.state = 'working';
         c.workTimer = cycleLength(s, c, job);
-        if (job === 'tinker') {
-          const bench = freeBenches(s, c).find((b) => touching(c, b));
-          c.useObj = bench?.id ?? -1;
-          if (bench) faceObject(c, bench);
+        if (isHomeJob(job)) {
+          const station = homeObjects(s, c, job).find((o) => touching(c, o));
+          c.useObj = station?.id ?? -1;
+          if (station) faceObject(c, station);
         } else if (c.layer === 0) faceNearbyFixture(c);
         setThought(c, JOB[job].name);
         return;
@@ -936,9 +1037,9 @@ export function updateCrew(s: GameState, c: Crew, dt: number) {
       }
       c.workTimer -= dt;
       if (c.energy <= 0 && c.thought !== 'Overworked') setThought(c, 'Overworked');
-      if (job === 'tinker' && c.useObj >= 0) {
-        const bench = s.objects.find((o) => o.id === c.useObj);
-        if (bench) bench.usedUntil = s.time + 2;
+      if (isHomeJob(job) && c.useObj >= 0) {
+        const station = s.objects.find((o) => o.id === c.useObj);
+        if (station) station.usedUntil = s.time + 2;
       }
       if (c.workTimer <= 0) {
         const before = { ...c.carrying };
@@ -1007,18 +1108,25 @@ function watcherNear(s: GameState, x: number, y: number): string | null {
   return null;
 }
 
-export function restCrew(s: GameState, c: Crew) {
-  const shift = shiftNow(s);
-  if (shift === 'day') c.dayJob = 'rest';
-  if (shift === 'night') c.nightJob = 'rest';
+export function callOff(s: GameState, c: Crew) {
+  c.calledOff = shiftKey(s);
   if (c.state === 'away' || c.state === 'fleeing') return;
   c.useObj = -1;
-  if (c.layer === 0) sendCrewHome(s, c, 'Calling it. Heading home');
-  else {
+  if (c.layer === 0) sendCrewHome(s, c, 'Called home. Heading back');
+  else if (c.state === 'working' || c.state === 'toWork') {
     c.state = 'idle';
     c.timer = 0;
-    setThought(c, 'Calling it');
+    setThought(c, 'Off this shift');
   }
+}
+
+const outInTheMall = (c: Crew) => c.state !== 'away' && c.state !== 'fleeing' && (c.layer === 0 || (c.state === 'toWork' && c.goal >= 0 && c.goal < N));
+
+export function callAllHome(s: GameState): number {
+  const out = s.crew.filter(outInTheMall);
+  for (const c of out) callOff(s, c);
+  if (out.length) log(s, `You called everyone home. ${out.map((c) => c.name).join(', ')} dropped what they were doing.`, 'info');
+  return out.length;
 }
 
 export function startFlee(s: GameState, c: Crew) {
@@ -1082,13 +1190,19 @@ const SPOTTED_HEAT = 15;
 const HEAT_AFTER_ARREST = 40;
 export const HEAT_WARNING = 75;
 
-export function heatTick(s: GameState, c: Crew, rate: number, dt: number) {
-  const mult = has(c, 'invisible') ? 0.1 : 1;
+function heatGainMult(s: GameState, c: Crew): number {
+  const invisible = has(c, 'invisible') ? 0.1 : 1;
   const crackdown = (s.flags.crackdownUntil ?? 0) > s.time ? 2 : 1;
   const halloween = s.flags.costumeDay === dayOf(s.time) ? 0 : 1;
+  const [m, d] = md(dayOf(s.time));
+  const blackFridayCrowd = m === 11 && d === 26 ? 0.5 : 1;
+  const noticed = 0.35 + 0.65 * pressure(s, 3, 6);
+  return invisible * crackdown * halloween * blackFridayCrowd * noticed;
+}
+
+export function heatTick(s: GameState, c: Crew, rate: number, dt: number) {
   const before = c.heat;
-  const noticed = rate > 0 ? 0.35 + 0.65 * pressure(s, 3, 6) : 1;
-  addHeat(c, rate * mult * crackdown * halloween * noticed * dt);
+  addHeat(c, rate * (rate > 0 ? heatGainMult(s, c) : 1) * dt);
   if (before < HEAT_WARNING && c.heat >= HEAT_WARNING)
     log(s, `Officer Dana is watching ${c.name} closely. Rest them by day to cool off before she makes a call.`, 'bad', { x: Math.floor(c.x), y: Math.floor(c.y), layer: 0 });
   if (c.heat >= 100 && c.state !== 'away') crewArrestedByDay(s, c);
@@ -1099,7 +1213,7 @@ export function addHeat(c: Crew, amount: number) {
 }
 
 export function coolHeat(c: Crew, dt: number) {
-  const lyingLow = c.dayJob === 'rest' ? 2 : 1;
+  const lyingLow = c.dayJob === 'rest' || isHomeJob(c.dayJob) ? 2 : 1;
   addHeat(c, (-HEAT_FADE_PER_DAY * lyingLow * dt) / 1440);
 }
 

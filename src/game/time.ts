@@ -32,6 +32,16 @@ export function weekday(day: number): number {
   return dateOf(day).getDay();
 }
 
+export const weekdayName = (day: number) => WEEKDAYS[weekday(day)];
+
+export const weekOf = (day: number) => Math.floor((day + 4) / 7);
+
+export function morningOf(today: number, day: number): string {
+  if (day === today) return 'this morning';
+  if (day === today + 1) return 'tomorrow morning';
+  return `${weekdayName(day)} morning`;
+}
+
 export function md(day: number): [number, number] {
   const d = dateOf(day);
   return [d.getMonth() + 1, d.getDate()];

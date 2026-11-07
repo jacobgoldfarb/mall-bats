@@ -1,6 +1,6 @@
 import { BUILD, JOB } from './defs';
 import { stat } from './needs';
-import { agentNode, crewCaught, currentJob, goTo, has, heatDetectMult, heatTick, makeLook, moveAgent, spottedHeat, startFlee } from './crew';
+import { agentNode, crewCaught, currentJob, goTo, has, heatDetectMult, heatTick, lookoutMult, makeLook, moveAgent, spottedHeat, startFlee } from './crew';
 import { E_STAFF, H, LAYOUT, N, W, edgeBetween, idx, inBounds, type Waypoint } from './layout';
 import { suspicionLevel, log, notify, rand, raiseSuspicion, sfx } from './ops';
 import type { Crew, GameState, Npc, NpcKind, Placed } from './state';
@@ -22,7 +22,7 @@ import {
   nodeOf,
   roomTiles,
 } from './world';
-import { revealInspection } from './inspect';
+import { INSPECTORS, revealInspection } from './inspect';
 
 export function spawnNpc(s: GameState, kind: NpcKind, x: number, y: number, extra: Partial<Npc> = {}): Npc {
   const look = makeLook(null);
@@ -213,8 +213,12 @@ function updateGuard(s: GameState, n: Npc, dt: number, noise: Float32Array) {
       if (moveAgent(n, n.speed, dt)) n.state = 'gone';
       return;
     case 'asleep':
+      moveAgent(n, n.speed, dt);
       n.bubble = { text: 'z z z', until: s.time + 3 };
-      if ((s.flags.garyAsleepUntil ?? 0) <= s.time) n.state = 'patrol';
+      if ((s.flags.garyAsleepUntil ?? 0) <= s.time) {
+        n.state = 'patrol';
+        n.path = [];
+      }
       return;
     case 'listen':
       n.timer -= dt;
@@ -327,7 +331,7 @@ function updateInspector(s: GameState, n: Npc, dt: number) {
 export function startInspector(s: GameState, insId: number) {
   const ins = s.inspections.find((i) => i.id === insId)!;
   const n = spawnNpc(s, 'inspector', 10, 1, {
-    name: ins.kind === 'fire' ? 'Fire Marshal' : ins.kind === 'pest' ? 'Pest Control' : ins.kind === 'sweep' ? 'Police' : 'Dale (Maintenance)',
+    name: INSPECTORS[ins.kind].npc,
     inspectionId: ins.id,
     speed: 0.32,
   });
@@ -408,7 +412,20 @@ export function updateCrewDanger(s: GameState) {
   }
 }
 
+const SPOTTED_SUSPICION = 3;
+const CHARM_SENSOR = 1.2;
 const BAG_SPOT_RANGE = 2.5;
+
+function segmentDistance(px: number, py: number, a: Waypoint, b: Waypoint): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const t = dx || dy ? Math.max(0, Math.min(1, ((px - a.x) * dx + (py - a.y) * dy) / (dx * dx + dy * dy))) : 0;
+  return Math.hypot(px - (a.x + t * dx), py - (a.y + t * dy));
+}
+
+export function onPatrolRoute(x: number, y: number): boolean {
+  return [...LAYOUT.nightRoutes, LAYOUT.dayRoute].some((route) => route.some((wp, i) => segmentDistance(x, y, wp, route[(i + 1) % route.length]) < BAG_SPOT_RANGE));
+}
 const BAG_SUSPICION = 4;
 const BAG_FEED_NOTICED_PER_HOUR = 0.04;
 const DECOY_REACH = 1.2;
@@ -431,8 +448,22 @@ export function updateMallItems(s: GameState) {
         raiseSuspicion(s, BAG_SUSPICION, 'A camera feed went dark');
       }
     }
-    if (o.type === 'tamagotchi' && night) lureGuard(s, o);
+    if (o.type === 'tamagotchi' && night && o.beeping) lureGuard(s, o);
   }
+}
+
+export function feedBlocked(s: GameState, o: Placed): string | null {
+  if (!o.delivered) return 'Nobody has carried it down yet';
+  if (o.beeping) return 'Already beeping';
+  if (phaseAt(s.time) !== 'night') return 'Only after hours';
+  return null;
+}
+
+export function feedTamagotchi(s: GameState, o: Placed) {
+  if (feedBlocked(s, o)) return;
+  o.beeping = true;
+  log(s, 'The Tamagotchi wants attention. BEEP. BEEP. BEEP.', 'info', { x: o.x, y: o.y, layer: 0 });
+  sfx('huh');
 }
 
 function lureGuard(s: GameState, o: Placed) {
@@ -465,6 +496,8 @@ export function detection(s: GameState, dt: number) {
   const teamRoutes = s.crew.some((c) => has(c, 'routes') && c.state !== 'away') ? 0.85 : 1;
   const blackout = (s.flags.blackoutUntil ?? 0) > s.time;
   const lvl = suspicionLevel(s.suspicion);
+  const periscope = lookoutMult(s);
+  const charm = LAYOUT.roomIndex['zalez'];
 
   for (const c of s.crew) {
     if (c.layer !== 0 || c.state === 'away' || c.climb > 0) {
@@ -501,7 +534,7 @@ export function detection(s: GameState, dt: number) {
     const stealthMod =
       (1.3 - stat(s, c, 'stealth') * 0.15) *
       (c.hiding ? 0.3 + stat(s, c, 'stealth') * 0.03 : c.state === 'working' ? 1.15 : 1) *
-      (d.periscopeAt[idx(Math.floor(c.x), Math.floor(c.y))] ? 0.7 : 1) *
+      (d.periscopeAt[idx(Math.floor(c.x), Math.floor(c.y))] ? periscope : 1) *
       teamRoutes *
       diff *
       heatDetectMult(c);
@@ -532,10 +565,9 @@ export function detection(s: GameState, dt: number) {
         }
       });
     }
-    if (lvl >= 4 && c.moving) {
-      const ri = LAYOUT.roomAt[idx(Math.floor(c.x), Math.floor(c.y))];
-      if (ri >= 0 && (LAYOUT.rooms[ri].kind === 'concourse' || LAYOUT.rooms[ri].kind === 'court')) rate += 0.25 * diff;
-    }
+    const ri = LAYOUT.roomAt[idx(Math.floor(c.x), Math.floor(c.y))];
+    if (lvl >= 4 && c.moving && ri >= 0 && (LAYOUT.rooms[ri].kind === 'concourse' || LAYOUT.rooms[ri].kind === 'court')) rate += 0.25 * diff;
+    if (c.moving && !blackout && ri === charm && !s.rooms[charm].vacant) rate += CHARM_SENSOR * stealthMod;
 
     if (phase === 'closing') rate *= 0.4;
     c.spottedBy = bestSource ? bestSource.id : cameraHit >= 0 ? -2 : -1;
@@ -547,6 +579,11 @@ export function detection(s: GameState, dt: number) {
       spottedHeat(c);
       const tile = { x: Math.floor(c.x), y: Math.floor(c.y), layer: 0 as const };
       sfx('spotted');
+      const witness = bestSource ? (bestSource.kind === 'guard' ? bestSource.name : 'A janitor') : cameraHit >= 0 ? `Camera ${cameraHit + 1}` : 'A motion sensor';
+      if (!s.spottedTonight) {
+        s.spottedTonight = true;
+        raiseSuspicion(s, SPOTTED_SUSPICION, `${witness} saw someone after hours`);
+      }
       if (bestSource && bestSource.kind === 'guard') {
         bestSource.state = 'chase';
         bestSource.chaseId = c.id;
@@ -555,10 +592,8 @@ export function detection(s: GameState, dt: number) {
         bestSource.bubble = { text: '!', until: s.time + 15, tone: 'alert' };
         log(s, `${bestSource.name} spotted ${c.name}! "HEY! STOP RIGHT THERE!"`, 'bad', tile);
       } else {
-        const reporter = bestSource ? 'A janitor' : `Camera ${cameraHit + 1}`;
         if (bestSource) bestSource.bubble = { text: '!', until: s.time + 15, tone: 'alert' };
-        if (cameraHit >= 0) s.cameras[cameraHit].cooldown = s.time + 30;
-        log(s, `${reporter} spotted ${c.name}. Security is on the way.`, 'bad', tile);
+        log(s, `${witness} spotted ${c.name}. Security is on the way.`, 'bad', tile);
         const guard = s.npcs.find((n) => n.kind === 'guard' && n.state !== 'chase' && n.state !== 'asleep' && n.state !== 'offduty');
         if (guard) {
           guard.state = 'investigate';

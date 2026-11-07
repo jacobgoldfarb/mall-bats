@@ -4,9 +4,9 @@ import { hash2 } from '../game/rng';
 import { guardCone } from '../game/npc';
 import { drawHeatMap } from './heat';
 import type { Crew, GameState, Npc, Placed } from '../game/state';
-import { dayOf, minuteOfDay, phaseAt } from '../game/time';
-import { forecastInspection, forecastLabel } from '../game/inspect';
-import { CAMERA_FOV, CAMERA_RANGE, boundariesSignal, cameraAngle, canPlace, sightPolygon } from '../game/world';
+import { dayOf, formatClock, minuteOfDay, morningOf, phaseAt } from '../game/time';
+import { INSPECTORS, forecastInspection, forecastLabel } from '../game/inspect';
+import { CAMERA_FOV, CAMERA_RANGE, cameraAngle, cameraLive, canPlace, sightPolygon, wifiAt } from '../game/world';
 import { popupName } from '../game/sim';
 import { BODY_FONT, DISPLAY_FONT, bubble, box, diamondPath, drawPerson, faceQuad, isoText, roundRect, type Ctx, type WorkMotion } from './draw';
 import { TH, TW, isoX, isoY, mix, screenToWorld, shade, type Camera } from './iso';
@@ -20,6 +20,7 @@ export interface ViewState {
   overlay: Overlay;
   hover: { x: number; y: number } | null;
   build: BuildId | null;
+  moving: number | null;
   demolish: boolean;
   dragStart: { x: number; y: number } | null;
   selectedCrew: number | null;
@@ -762,9 +763,10 @@ export class Renderer {
       ctx.lineWidth = 1;
       ctx.stroke();
     }
+    if (night && s.gary.insider && !s.gary.replaced) this.drawGaryRoute();
     if (night && (s.flags.blackoutUntil ?? 0) <= s.time) {
       for (const c of s.cameras) {
-        if (!c.active) continue;
+        if (!cameraLive(s, c)) continue;
         ctx.beginPath();
         this.conePath(ctx, c.x, c.y, cameraAngle(c, s.time), CAMERA_FOV, CAMERA_RANGE);
         ctx.fillStyle = 'rgba(255,40,40,0.10)';
@@ -773,6 +775,20 @@ export class Renderer {
         ctx.stroke();
       }
     }
+  }
+
+  private drawGaryRoute() {
+    const ctx = this.ctx;
+    const route = LAYOUT.nightRoutes[0];
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,201,62,0.55)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([3, 6]);
+    ctx.beginPath();
+    route.forEach((wp, i) => (i ? ctx.lineTo : ctx.moveTo).call(ctx, isoX(wp.x + 0.5, wp.y + 0.5), isoY(wp.x + 0.5, wp.y + 0.5)));
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
   }
 
   private lightBegin(darkness: string) {
@@ -1142,7 +1158,7 @@ export class Renderer {
     if (pc) {
       ctx.fillStyle = '#5aff8a';
       ctx.font = `600 10px ${BODY_FONT}`;
-      ctx.fillText(`Wi-Fi ${Math.round(boundariesSignal(pc.x, pc.y) * 100)}%`, isoX(pc.x + 0.5, pc.y + 0.5), isoY(pc.x + 0.5, pc.y + 0.5, 40));
+      ctx.fillText(`Wi-Fi ${Math.round(wifiAt(s, pc.x, pc.y) * 100)}%`, isoX(pc.x + 0.5, pc.y + 0.5), isoY(pc.x + 0.5, pc.y + 0.5, 40));
     }
   }
 
@@ -1283,7 +1299,7 @@ export class Renderer {
         ? ins.state === 'climbing'
           ? 'INSPECTING NOW'
           : 'INSPECTOR EN ROUTE'
-        : `${ins.kind === 'power' ? 'ELECTRICIAN' : ins.kind === 'fire' ? 'FIRE MARSHAL' : ins.kind === 'pest' ? 'PEST CONTROL' : 'INSPECTION'} ${dayOf(ins.at) === dayOf(s.time) ? 'TODAY' : 'TOMORROW'} ${Math.floor((ins.at % 1440) / 60)}:${String(Math.floor(ins.at % 60)).padStart(2, '0')}`;
+        : `${INSPECTORS[ins.kind].label.toUpperCase()} ${morningOf(dayOf(s.time), dayOf(ins.at)).toUpperCase()} ${formatClock(ins.at)}`;
       ctx.font = `600 11px ${BODY_FONT}`;
       ctx.textAlign = 'center';
       const w = ctx.measureText(label).width + 12;
@@ -1316,8 +1332,9 @@ export class Renderer {
         for (let yy = y0; yy <= y1; yy++) for (let xx = x0; xx <= x1; xx++) tiles.push([xx, yy]);
       } else tiles.push([x, y]);
       let total = 0;
+      const moving = s.objects.find((o) => o.id === v.moving);
       for (const [tx, ty] of tiles) {
-        const err = v.build === 'deck' && v.dragStart ? dragDeckError(s, tx, ty) : canPlace(s, v.build, tx, ty);
+        const err = v.build === 'deck' && v.dragStart ? dragDeckError(s, tx, ty) : canPlace(s, v.build, tx, ty, moving);
         if (!err) total += BUILD[v.build].cost;
         ctx.fillStyle = err ? 'rgba(255,45,85,0.35)' : 'rgba(42,212,200,0.35)';
         ctx.beginPath();
@@ -1330,13 +1347,13 @@ export class Renderer {
         drawBuildable(ctx, v.build, x, y, t, { powered: true, inUse: false, alpha: 0.7, flip: v.flip && canRotate(v.build) });
         ctx.restore();
         const def = BUILD[v.build];
-        const rad = def.radius ?? def.insulationRadius ?? (def.periscope ? 6 : def.fanRadius);
+        const rad = def.radius ?? def.insulationRadius ?? def.deterRadius ?? (def.periscope ? 6 : def.fanRadius);
         if (rad) {
           ctx.strokeStyle = 'rgba(255,233,74,0.8)';
           ctx.setLineDash([5, 4]);
           ctx.lineWidth = 1.5;
           ctx.beginPath();
-          if (def.insulationRadius || def.fanRadius) diamondPath(ctx, x - rad, y - rad, rad * 2 + 1, rad * 2 + 1, 2);
+          if (def.insulationRadius || def.fanRadius || def.deterRadius) diamondPath(ctx, x - rad, y - rad, rad * 2 + 1, rad * 2 + 1, 2);
           else ctx.ellipse(isoX(x + 0.5, y + 0.5), isoY(x + 0.5, y + 0.5), rad * TW * 0.707, rad * TH * 0.707, 0, 0, Math.PI * 2);
           ctx.stroke();
           ctx.setLineDash([]);
@@ -1345,7 +1362,7 @@ export class Renderer {
           ctx.fillStyle = '#5aff8a';
           ctx.font = `600 11px ${BODY_FONT}`;
           ctx.textAlign = 'center';
-          ctx.fillText(`Wi-Fi ${Math.round(boundariesSignal(x, y) * 100)}%`, isoX(x + 0.5, y + 0.5), isoY(x + 0.5, y + 0.5, 40));
+          ctx.fillText(`Wi-Fi ${Math.round(wifiAt(s, x, y) * 100)}%`, isoX(x + 0.5, y + 0.5), isoY(x + 0.5, y + 0.5, 40));
         }
       }
       if (tiles.length > 1) {

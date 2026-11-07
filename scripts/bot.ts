@@ -1,5 +1,5 @@
 import { newGame } from '../src/game/create';
-import { resolveModal } from '../src/game/events';
+import { recruitBlocked, resolveModal, showVisitor } from '../src/game/events';
 import { jobBlocked } from '../src/game/crew';
 import { forecastInspection } from '../src/game/inspect';
 import { LAYOUT } from '../src/game/layout';
@@ -137,8 +137,8 @@ function manage() {
     const lyingLow = s.suspicion > 45 && i >= 2;
     c.nightJob = lyingLow || (c.energy < 25 && minuteOfDay(s.time) < 20 * 60 && minuteOfDay(s.time) > 8 * 60) ? 'rest' : night;
     c.dayJob = c.energy < 35 || c.heat > 70 ? 'rest' : day;
-    c.fillIn = true;
   });
+  for (const v of [...s.ladder]) if (!recruitBlocked(s)) showVisitor(s, v);
 }
 
 let lastDay = -1;

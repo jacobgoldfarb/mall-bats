@@ -1,5 +1,5 @@
 import { BUILD, type BuildCategory, type BuildId } from './game/defs';
-import type { GameState } from './game/state';
+import type { GameState, Placed } from './game/state';
 import type { Overlay, Renderer, ViewState } from './render/renderer';
 
 export type Screen = 'title' | 'game';
@@ -47,6 +47,7 @@ export const app: AppState = {
     overlay: 'none',
     hover: null,
     build: null,
+    moving: null,
     demolish: false,
     dragStart: null,
     selectedCrew: null,
@@ -120,10 +121,18 @@ export const buildLayer = (id: BuildId): 0 | 1 => (BUILD[id].floor ? 0 : 1);
 export function selectBuild(id: BuildId | null) {
   focusPowerFor(id);
   app.view.build = id;
+  app.view.moving = null;
   app.view.demolish = false;
   app.view.dragStart = null;
   if (id) app.view.layer = buildLayer(id);
   refresh();
+}
+
+export function startMove(o: Placed) {
+  selectBuild(o.type);
+  app.view.moving = o.id;
+  app.view.flip = !!o.flipped;
+  app.selectedObj = null;
 }
 
 export function focusTile(x: number, y: number, layer?: 0 | 1) {

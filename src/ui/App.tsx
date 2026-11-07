@@ -328,7 +328,7 @@ function Help() {
               <Icon name="art.gary" /> Inspections
             </h4>
             <p>
-              Stores that hear or smell too much report you, and inspectors come up to look. The red zone shows where. Clear out, stash what you can, or give them a reason to leave early.
+              Stores that hear or smell too much report you, and inspectors come up to look. The red zone shows where. Move things out, or give them a reason to leave early.
             </p>
           </section>
           <section>
@@ -376,7 +376,7 @@ function Help() {
               <Icon name="work" /> Jobs
             </h4>
             <p>
-              Open the <b>Job Board</b> (J) and give each Bat a <b>Day</b> and a <b>Night</b> job. Night pays better, but Gary is out there. Each Bat carries <b>Heat</b>: get spotted or get predictable and Officer Dana starts paying attention.
+              Open the <b>Job Board</b> (J) and give each Bat a <b>Day</b> and a <b>Night</b> job. Night pays better, but Gary is out there, and <b>All home</b> (G) pulls everyone back up. Each Bat carries <b>Heat</b>: get spotted and Officer Dana starts paying attention. A day at home cools it.
             </p>
           </section>
           <section>
@@ -397,7 +397,7 @@ function Help() {
           </section>
           <section>
             <h4>Controls</h4>
-            <p>Right-drag or WASD to pan · Wheel to zoom · Space to pause · 1/2/3 for speed · B Build · X Remove · O cycle overlays · Alt for x-ray · H go to the hatch · Esc for the menu</p>
+            <p>Right-drag or WASD to pan · Wheel to zoom · Space to pause · 1/2/3 for speed · B Build · X Remove · M Move · G All home · O cycle overlays · Alt for x-ray · H go to the hatch · Esc for the menu</p>
           </section>
         </div>
         <div class="modal-choices">

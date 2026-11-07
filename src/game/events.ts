@@ -1,31 +1,52 @@
 import { ARCHETYPES, TRAITS } from './defs';
-import { BAIL_HOURS, addCrew, bedCapacity, makeCandidate } from './crew';
-import { resolveHijinx, startHijinx } from './hijinx';
+import { BAIL_HOURS, addCrew, bedCapacity, goTo, makeCandidate } from './crew';
+import { HIJINX_HOURS, resolveHijinx, startHijinx } from './hijinx';
 import { scheduleNear } from './inspect';
 import { LAYOUT } from './layout';
 import { FOOD_PRICE, addMood } from './needs';
 import { auctionBid, earn, levelOf, log, pa, phone, pushModal, rand, sfx, unlock } from './ops';
-import type { Candidate, GameState } from './state';
+import type { Candidate, GameState, Visitor } from './state';
 import { AUCTION_DAY, dayOf, formatClock, formatDate } from './time';
-import { markDirty } from './world';
+import { ACCESS_STAFF, markDirty, nodeOf } from './world';
 
-export function offerCandidate(s: GameState, c: Candidate, intro: string) {
-  s.candidate = c;
+const LADDER_DAYS = 3;
+
+export function recruitBlocked(s: GameState): string | null {
+  if (s.crew.length >= bedCapacity(s) + 1) return 'Build another bed first';
+  if (s.cash < Math.max(0, 3 - s.food) * FOOD_PRICE) return 'Needs 3 food';
+  return null;
+}
+
+export function showVisitor(s: GameState, v: Visitor) {
+  const c = v.candidate;
   const arch = ARCHETYPES.find((a) => a.id === c.archetype)!;
   const traits = c.traits.map((t) => `${TRAITS[t].name}: ${TRAITS[t].desc}`).join('\n');
-  const full = s.crew.length >= bedCapacity(s) + 1;
   const short = Math.max(0, 3 - s.food);
   const foodLabel = short ? `3 food: buy ${short} for $${short * FOOD_PRICE}` : '3 food';
+  const waits = `${c.name} will wait at the ladder until ${formatDate(dayOf(v.until))}.`;
   pushModal(s, {
     title: `${c.name}, ${arch.title}`,
     art: 'recruit',
-    body: `${intro}\n\n"${c.bio}"\n\nStealth ${'●'.repeat(c.stealth)}${'○'.repeat(5 - c.stealth)}   Charm ${'●'.repeat(c.charm)}${'○'.repeat(5 - c.charm)}   Handy ${'●'.repeat(c.handy)}${'○'.repeat(5 - c.handy)}${traits ? `\n\n${traits}` : ''}`,
+    body: `${v.intro}\n\n"${c.bio}"\n\nStealth ${'●'.repeat(c.stealth)}${'○'.repeat(5 - c.stealth)}   Charm ${'●'.repeat(c.charm)}${'○'.repeat(5 - c.charm)}   Handy ${'●'.repeat(c.handy)}${'○'.repeat(5 - c.handy)}${traits ? `\n\n${traits}` : ''}\n\n${waits}`,
+    data: { visitor: v.id },
     choices: [
-      { label: `Welcome to the ceiling (${foodLabel})`, action: 'recruit', disabled: full ? 'Build another bed first' : s.cash < short * FOOD_PRICE ? 'Needs 3 food' : undefined },
-      { label: 'Not right now', action: 'decline' },
+      { label: `Welcome to the ceiling (${foodLabel})`, action: `recruit:${v.id}`, disabled: recruitBlocked(s) ?? undefined },
+      { label: 'Not yet', action: 'ok' },
+      { label: 'Send them away', action: `decline:${v.id}` },
     ],
   });
   sfx('phone');
+}
+
+export function offerCandidate(s: GameState, c: Candidate, intro: string) {
+  const v: Visitor = { id: s.nextId++, candidate: c, intro, until: s.time + LADDER_DAYS * 1440 };
+  s.ladder.push(v);
+  showVisitor(s, v);
+}
+
+export function visitorsLeave(s: GameState) {
+  for (const v of s.ladder.filter((x) => x.until <= s.time)) log(s, `${v.candidate.name} stopped waiting at the ladder.`, 'info');
+  s.ladder = s.ladder.filter((x) => x.until > s.time);
 }
 
 const RECRUIT_INTROS = [
@@ -36,18 +57,20 @@ const RECRUIT_INTROS = [
   'You find someone hiding in the Sears dressing rooms at closing. They look at you. You look at them.',
 ];
 
-export function closeStore(s: GameState, id: string) {
+export function closeStore(s: GameState, id: string, brokeLease = false) {
   const ri = LAYOUT.roomIndex[id];
   const rs = s.rooms[ri];
   if (rs.vacant) return;
   rs.vacant = true;
   rs.complaint = 0;
+  rs.strain = 0;
   s.mallHealth = Math.max(0.1, s.mallHealth - 0.045);
   s.stats.storesClosed++;
   markDirty();
   const r = LAYOUT.rooms[ri];
-  pa(s, r.closingLine ?? `${r.name} has closed its doors.`);
-  log(s, `${r.name} closed for good. Nobody below to hear you, and no power to steal. The developer's bid drops to $${auctionBid(s).toLocaleString()}.`, 'warn', {
+  pa(s, brokeLease ? `${r.name} has closed its doors. Management thanks them for their years at Northgate.` : (r.closingLine ?? `${r.name} has closed its doors.`));
+  const why = brokeLease ? `${r.name} broke its lease. The manager blamed "the building."` : `${r.name} closed for good.`;
+  log(s, `${why} Nobody below to hear you, and no power to steal. The developer's bid drops to $${auctionBid(s).toLocaleString()}.`, 'warn', {
     x: Math.floor((r.x0 + r.x1) / 2),
     y: Math.floor((r.y0 + r.y1) / 2),
     layer: 1,
@@ -130,7 +153,8 @@ const SCRIPT: Scripted[] = [
       pa(s, 'Security note: Trainee Kyle shadows the night shift tonight. Welcome aboard, Kyle!');
     },
   },
-  { day: 45, hour: 15, key: 'fire', run: (s) => { if (levelOf(s) >= 7) scheduleNear(s, 'fire', 'Annual fire code inspection.', 2); } },
+  { day: 47, hour: 15, key: 'fire', run: (s) => { if (levelOf(s) >= 7) scheduleNear(s, 'fire', 'Annual fire code inspection.', 2); } },
+  { day: 50, hour: 8, key: 'cold', run: (s) => log(s, 'The ducts freeze at night now. The crew wants a Space Heater.', 'warn') },
   {
     day: 48,
     hour: 12,
@@ -164,11 +188,10 @@ const SCRIPT: Scripted[] = [
     key: 'blackfriday',
     run: (s) => {
       pa(s, 'BLACK FRIDAY! Doors are OPEN! Doorbusters at Sears and Future Shop! Please do not trample your fellow shoppers!');
-      log(s, 'Black Friday. The mall is deafening. Nobody will hear a thing upstairs.', 'good');
+      log(s, 'Black Friday. The mall is deafening. Nobody will hear a thing upstairs, and Future Shop shoppers will pay cash to skip the line.', 'good');
     },
   },
   { day: 60, hour: 9, key: 'closeClaire', run: (s) => closeStore(s, 'claire') },
-  { day: 61, hour: 8, key: 'cold', run: (s) => log(s, 'December. The ducts freeze at night. The crew wants a Space Heater.', 'warn') },
   { day: 64, hour: 14, key: 'recruit6', run: (s) => offerCandidate(s, makeCandidate(s), rand.pick(RECRUIT_INTROS)) },
   {
     day: 70,
@@ -186,7 +209,7 @@ const SCRIPT: Scripted[] = [
     run: (s) => {
       s.flags.blackoutUntil = s.time + 8 * 60;
       pa(s, 'Attention: rolling blackout. Emergency lighting only. Cameras are offline until morning.');
-      log(s, 'Blackout. The cameras are down tonight, and so are your splices.', 'good');
+      log(s, "Blackout. The cameras are down tonight, nobody's meter is running, and Charm Diamond Centres' motion sensors are on the same grid.", 'good');
     },
   },
   { day: 80, hour: 9, key: 'closeRadio', run: (s) => closeStore(s, 'radiohut') },
@@ -234,6 +257,7 @@ export function resolveAuction(s: GameState) {
     unlock(s, 'KING');
     s.over = {
       won: true,
+      margin: (s.cash - bid) / bid,
       title: 'KING OF NORTHGATE',
       text: `The auctioneer squints at the shoebox full of fountain quarters, NY Fries receipts, and eBay PayPal printouts.\n\n"Sold, for $${Math.floor(s.cash).toLocaleString()}, to... the ceiling people?"\n\nPrestige Lifestyle Developers bid $${bid.toLocaleString()}. You beat them by $${Math.floor(s.cash - bid).toLocaleString()}.\n\nNorthgate Mall is yours. Your crew climbs down the ladder for the last time, and walks out the front doors in broad daylight.`,
     };
@@ -246,16 +270,27 @@ export function resolveAuction(s: GameState) {
   }
 }
 
-const RANDOM_EVENTS: { key: string; weight: number; when: (s: GameState, hour: number) => boolean; run: (s: GameState, hour: number) => void }[] = [
+interface RandomEvent {
+  key: string;
+  weight: number;
+  hours?: [from: number, to: number];
+  when: (s: GameState) => boolean;
+  run: (s: GameState, hour: number) => void;
+}
+
+const GARY_NAP_HOURS = 6;
+
+const RANDOM_EVENTS: RandomEvent[] = [
   {
     key: 'hijinx',
     weight: 2.5,
+    hours: HIJINX_HOURS,
     when: (s) => s.crew.length > 0,
     run: (s, hour) => startHijinx(s, hour),
   },
   {
     key: 'raccoon',
-    weight: 1.5,
+    weight: 1,
     when: () => true,
     run: (s) => {
       s.rooms.forEach((r) => (r.complaint = Math.max(0, r.complaint - 25)));
@@ -265,18 +300,24 @@ const RANDOM_EVENTS: { key: string; weight: number; when: (s: GameState, hour: n
   },
   {
     key: 'garynap',
-    weight: 1.2,
-    when: (s, h) => h === 22 && !s.gary.replaced,
+    weight: 1,
+    hours: [22, 23],
+    when: (s) => !s.gary.replaced,
     run: (s) => {
-      s.flags.garyAsleepUntil = s.time + 4 * 60 + 60 * 2;
-      log(s, 'Gary brought a pillow tonight. Expect him to nod off in the Security Office around midnight.', 'good');
-      for (const n of s.npcs) if (n.isGary) n.state = 'asleep';
+      s.flags.garyAsleepUntil = s.time + GARY_NAP_HOURS * 60;
+      log(s, "Gary brought a pillow tonight. He's headed for the Security Office couch, and he won't be back out until 4.", 'good');
+      for (const n of s.npcs) {
+        if (!n.isGary) continue;
+        n.state = 'asleep';
+        goTo(s, n, [nodeOf(0, 33, 1)], ACCESS_STAFF);
+      }
     },
   },
   {
     key: 'crackdown',
-    weight: 1,
-    when: (s, h) => h === 10 && s.crew.length > 1,
+    weight: 0.5,
+    hours: [10, 11],
+    when: (s) => s.crew.length > 1,
     run: (s) => {
       s.flags.crackdownUntil = s.time + 3 * 1440;
       pa(s, 'Mall Management reminds guests: our Parental Escort Policy is now in effect. Loitering is prohibited.');
@@ -285,8 +326,9 @@ const RANDOM_EVENTS: { key: string; weight: number; when: (s: GameState, hour: n
   },
   {
     key: 'clearance',
-    weight: 1.2,
-    when: (_s, h) => h === 20,
+    weight: 1,
+    hours: [20, 21],
+    when: () => true,
     run: (s) => {
       s.pools.pallets = (s.pools.pallets ?? 0) + 50;
       log(s, 'Future Shop dumped a truckload of returns on the dock. Dock Pallets is stacked tonight.', 'good');
@@ -294,7 +336,8 @@ const RANDOM_EVENTS: { key: string; weight: number; when: (s: GameState, hour: n
   },
   {
     key: 'looseTile',
-    weight: 1,
+    weight: 0.8,
+    hours: [10, 20],
     when: (s) => s.objects.some((o) => o.type === 'rope'),
     run: (s) => {
       const r = rand.pick(s.objects.filter((o) => o.type === 'rope'));
@@ -305,7 +348,7 @@ const RANDOM_EVENTS: { key: string; weight: number; when: (s: GameState, hour: n
   },
   {
     key: 'pestRandom',
-    weight: 0.8,
+    weight: 0.3,
     when: (s) => levelOf(s) >= 6,
     run: (s) => scheduleNear(s, 'pest', 'Routine pest inspection.', 1),
   },
@@ -321,19 +364,26 @@ const RANDOM_EVENTS: { key: string; weight: number; when: (s: GameState, hour: n
   },
 ];
 
+const FIRST_EVENT_DAY = 3;
+const DEFAULT_EVENT_HOURS: [number, number] = [8, 23];
+
+export function planDay(s: GameState) {
+  s.agenda = [];
+  if (dayOf(s.time) < FIRST_EVENT_DAY) return;
+  const options = RANDOM_EVENTS.filter((e) => e.when(s));
+  let roll = rand.next() * options.reduce((a, e) => a + e.weight, 0);
+  const e = options.find((o) => (roll -= o.weight) <= 0);
+  if (!e) return;
+  const [from, to] = e.hours ?? DEFAULT_EVENT_HOURS;
+  s.agenda.push({ key: e.key, hour: rand.int(from, to - 1) });
+}
+
 export function randomHourly(s: GameState, hour: number) {
-  if (dayOf(s.time) < 3 || s.modals.length) return;
-  if (!rand.chance(0.03)) return;
-  const options = RANDOM_EVENTS.filter((e) => e.when(s, hour) && s.flags[`rnd_${e.key}`] !== dayOf(s.time));
-  const total = options.reduce((a, e) => a + e.weight, 0);
-  let roll = rand.next() * total;
-  for (const e of options) {
-    roll -= e.weight;
-    if (roll <= 0) {
-      s.flags[`rnd_${e.key}`] = dayOf(s.time);
-      e.run(s, hour);
-      return;
-    }
+  const due = s.agenda.filter((a) => a.hour === hour);
+  s.agenda = s.agenda.filter((a) => a.hour !== hour);
+  for (const a of due) {
+    const e = RANDOM_EVENTS.find((x) => x.key === a.key)!;
+    if (e.when(s)) e.run(s, hour);
   }
 }
 
@@ -344,7 +394,7 @@ export function dailyCandidates(s: GameState) {
     pushModal(s, {
       title: 'Gary Knows',
       art: 'gary',
-      body: `This morning there was a note taped to your ladder, in careful block capitals:\n\n"I KNOW YOU'RE UP THERE. I'VE KNOWN FOR A WHILE. THANKS FOR THE FRIES. I HATE THIS JOB. CAN I COME UP? — GARY"\n\nIf Gary quits, he brings every patrol route with him. His replacement has never had NY Fries.\n\nIf he stays, he goes easy on you and tips you off.`,
+      body: `This morning there was a note taped to your ladder, in careful block capitals:\n\n"I KNOW YOU'RE UP THERE. I'VE KNOWN FOR A WHILE. THANKS FOR THE FRIES. I HATE THIS JOB. CAN I COME UP? — GARY"\n\nIf Gary quits, he brings every patrol route with him. His replacement has never had NY Fries.\n\nIf he stays, he goes easy on you, lets you see his route, and makes one inspection a week go away.`,
       choices: [
         { label: 'Gary joins the crew', action: 'gary_join' },
         { label: 'Gary stays on the inside', action: 'gary_insider' },
@@ -358,18 +408,27 @@ export function resolveModal(s: GameState, modalId: number, action: string) {
   const [verb, a, b] = action.split(':');
   switch (verb) {
     case 'recruit': {
-      if (!s.candidate) return;
+      const v = s.ladder.find((x) => x.id === Number(a));
+      if (!v || recruitBlocked(s)) return;
       const short = Math.max(0, 3 - s.food);
       s.cash -= short * FOOD_PRICE;
       s.food = Math.max(0, s.food - 3);
-      const c = addCrew(s, s.candidate);
+      s.ladder = s.ladder.filter((x) => x !== v);
+      const c = addCrew(s, v.candidate);
       log(s, `${c.name} climbed the ladder and joined the crew.`, 'good', { x: Math.floor(c.x), y: Math.floor(c.y), layer: 1 });
       sfx('good');
-      s.candidate = null;
       return;
     }
-    case 'decline':
-      s.candidate = null;
+    case 'decline': {
+      const v = s.ladder.find((x) => x.id === Number(a));
+      s.ladder = s.ladder.filter((x) => x !== v);
+      if (v) log(s, `${v.candidate.name} shrugged and went back down the ladder.`, 'info');
+      return;
+    }
+    case 'laststand':
+      s.miserable = 0;
+      addMood(s, 15);
+      log(s, `${s.crew[0]?.name ?? 'You'} unpacked the bag. One more week.`, 'info');
       return;
     case 'bail': {
       const c = s.crew.find((x) => x.id === Number(a));
