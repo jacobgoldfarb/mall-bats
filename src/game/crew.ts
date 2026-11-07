@@ -574,8 +574,6 @@ function doCycle(s: GameState, c: Crew, job: JobId): boolean {
       sfx('cash');
       return s.goods > 0;
     }
-    case 'lookout':
-      return true;
     case 'doorbuster': {
       const got = Math.round((3 + stat(s, c, 'charm') * 2) * rand.range(0.7, 1.3));
       k.cash += got;
@@ -595,12 +593,6 @@ function doCycle(s: GameState, c: Crew, job: JobId): boolean {
     }
   }
   return false;
-}
-
-export function lookoutMult(s: GameState): number {
-  const lookouts = s.crew.filter((c) => c.state === 'working' && c.activeJob === 'lookout');
-  if (!lookouts.length) return 0.7;
-  return 0.7 - 0.04 * Math.max(...lookouts.map((c) => stat(s, c, 'stealth')));
 }
 
 export function baseCycle(s: GameState, c: Crew, job: JobId): number {

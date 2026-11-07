@@ -15,7 +15,7 @@ export const INSPECTORS: Record<InspectionKind, { npc: string; who: string; labe
   sweep: { npc: 'Police', who: 'The police', label: 'Police sweep' },
 };
 
-const DECOY_PRICES = [25, 40, 60, 90];
+export const DECOY_PRICES = [25, 40, 60, 90];
 
 export const decoyPrice = (s: GameState, room: number) => DECOY_PRICES[Math.min(DECOY_PRICES.length - 1, room >= 0 ? s.rooms[room].decoys : 0)];
 
@@ -226,6 +226,7 @@ export function revealInspection(s: GameState, ins: Inspection) {
 
   if (forecast.verdict === 'raccoon') {
     const again = rs.decoys > 0;
+    const nextPrice = DECOY_PRICES[Math.min(DECOY_PRICES.length - 1, rs.decoys + 1)];
     rs.decoys++;
     rs.complaint = 0;
     s.stats.raccoons++;
@@ -238,7 +239,7 @@ export function revealInspection(s: GameState, ins: Inspection) {
     log(
       s,
       again
-        ? `"Another raccoon? Same one?" The decoy above ${room.name} worked. The next one here will need to be more convincing.`
+        ? `"Another raccoon? Same one?" The decoy above ${room.name} worked. The next one here costs $${nextPrice}.`
         : `"IT WAS RACCOONS." Pest control hauled the decoy out of the ceiling above ${room.name}. Worth every penny.`,
       'good',
       focus,

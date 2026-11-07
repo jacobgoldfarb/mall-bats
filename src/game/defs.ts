@@ -160,7 +160,6 @@ export type JobId =
   | 'listings'
   | 'scrap'
   | 'rig'
-  | 'lookout'
   | 'zalez'
   | 'doorbuster';
 
@@ -204,7 +203,6 @@ export const JOBS: JobDef[] = [
   { id: 'tinker', name: 'Tinker at Workbench', shift: 'both', home: ['workbench'], level: 4, stat: 'handy', cycle: 75, sketch: 0, desc: 'Parts in, goods out. Loud.', yields: 'Parts → Goods', risk: 'none' },
   { id: 'scrap', name: 'Sort the Haul', shift: 'both', home: ['crate'], level: 3, stat: 'handy', cycle: 30, sketch: 0, desc: 'Strip junk parts for copper. Earl buys it for his brother-in-law.', yields: 'Parts → $', risk: 'none' },
   { id: 'rig', name: 'Rig the Meters', shift: 'both', home: ['splice'], level: 4, stat: 'handy', cycle: 45, sketch: 0, desc: 'Fiddle with a splice so the meter downstairs reads low.', yields: 'Smaller power bill', risk: 'none' },
-  { id: 'lookout', name: 'Periscope Lookout', shift: 'night', home: ['periscope'], level: 5, stat: 'stealth', cycle: 30, sketch: 0, desc: 'Watch the flashlights and whisper directions down the vent.', yields: 'Bats below are harder to spot', risk: 'none' },
   { id: 'listings', name: 'Sell on eBay', shift: 'both', home: ['pc'], level: 7, stat: 'charm', cycle: 45, sketch: 0, desc: 'Post the lot. The PayPal email does the rest.', yields: 'Goods → $', risk: 'none' },
 ];
 

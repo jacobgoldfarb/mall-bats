@@ -128,7 +128,12 @@ export function loadGame(): GameState | null {
   const s = JSON.parse(raw) as GameState;
   if (s.version === 4) upgradeFromV4(s);
   if (s.version !== SAVE_VERSION) return null;
-  for (const c of s.crew) if (c.awayUntil === null) c.awayUntil = Infinity;
+  for (const c of s.crew) {
+    if (c.awayUntil === null) c.awayUntil = Infinity;
+    if ((c.dayJob as string) === 'lookout') c.dayJob = 'rest';
+    if ((c.nightJob as string) === 'lookout') c.nightJob = 'rest';
+    if ((c.activeJob as string) === 'lookout') c.activeJob = 'rest';
+  }
   rand.state = s.rng;
   markDirty();
   return s;

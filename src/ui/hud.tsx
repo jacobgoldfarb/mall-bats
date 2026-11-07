@@ -21,7 +21,7 @@ import {
   type BuildCategory,
 } from '../game/defs';
 import { resolveModal, showVisitor } from '../game/events';
-import { INSPECTORS, coverInspection, forecastInspection, forecastLabel, garyCanCover, signUsesLeft, type InspectionForecast } from '../game/inspect';
+import { DECOY_PRICES, INSPECTORS, coverInspection, forecastInspection, forecastLabel, garyCanCover, signUsesLeft, type InspectionForecast } from '../game/inspect';
 import { LAYOUT, C_DUCT, C_AC, C_SKYLIGHT, C_NONE, idx, inBounds } from '../game/layout';
 import { FOOD_PRICE, LOW_MOOD, MEAL_HOURS, mealNeed, moodStatBonus, moodTarget } from '../game/needs';
 import { feedBlocked, feedTamagotchi } from '../game/npc';
@@ -298,7 +298,6 @@ export function BuildPanel({ s }: { s: GameState }) {
                     {b.name}
                     <b class={cant ? 'bad' : ''}>
                       ${b.cost}
-                      {b.decoy && s.rooms.some((r) => r.decoys > 0) ? '+' : ''}
                       {b.parts ? (
                         <span class={`part-cost ${s.parts < b.parts ? 'short' : ''}`}>
                           {' + '}
@@ -308,7 +307,7 @@ export function BuildPanel({ s }: { s: GameState }) {
                       ) : null}
                     </b>
                   </div>
-                  <div class="item-desc">{locked ? `Locked · Level ${b.level}: ${levelInfo(b.level).theme}` : b.desc}</div>
+                  <div class="item-desc">{locked ? `Locked · Level ${b.level}: ${levelInfo(b.level).theme}` : b.decoy ? `${b.desc} Same store: $${DECOY_PRICES.join(', then $')}.` : b.desc}</div>
                   {!locked && (
                     <div class="item-tags">
                       {b.power ? <i class="tag power">USES {b.power}W</i> : null}

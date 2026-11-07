@@ -1,6 +1,6 @@
 import { BUILD, JOB } from './defs';
 import { stat } from './needs';
-import { agentNode, costumeOf, crewCaught, currentJob, goTo, has, heatDetectMult, heatTick, lookoutMult, makeLook, moveAgent, spottedHeat, startFlee } from './crew';
+import { agentNode, costumeOf, crewCaught, currentJob, goTo, has, heatDetectMult, heatTick, makeLook, moveAgent, spottedHeat, startFlee } from './crew';
 import { E_STAFF, H, LAYOUT, N, W, edgeBetween, idx, inBounds, type Waypoint } from './layout';
 import { suspicionLevel, log, notify, rand, raiseSuspicion, sfx } from './ops';
 import type { Crew, GameState, Npc, NpcKind, Placed } from './state';
@@ -501,6 +501,8 @@ function removeFloorItem(s: GameState, o: Placed, text: string, kind: 'info' | '
   log(s, text, kind, { x: o.x, y: o.y, layer: 0 });
 }
 
+const PERISCOPE_DETECT = 0.7;
+
 export function detection(s: GameState, dt: number) {
   const phase = phaseAt(s.time);
   const d = getDerived(s);
@@ -508,7 +510,6 @@ export function detection(s: GameState, dt: number) {
   const teamRoutes = s.crew.some((c) => has(c, 'routes') && c.state !== 'away') ? 0.85 : 1;
   const blackout = (s.flags.blackoutUntil ?? 0) > s.time;
   const lvl = suspicionLevel(s.suspicion);
-  const periscope = lookoutMult(s);
   const charm = LAYOUT.roomIndex['zalez'];
 
   for (const c of s.crew) {
@@ -546,7 +547,7 @@ export function detection(s: GameState, dt: number) {
     const stealthMod =
       (1.3 - stat(s, c, 'stealth') * 0.15) *
       (c.hiding ? 0.3 + stat(s, c, 'stealth') * 0.03 : c.state === 'working' ? 1.15 : 1) *
-      (d.periscopeAt[idx(Math.floor(c.x), Math.floor(c.y))] ? periscope : 1) *
+      (d.periscopeAt[idx(Math.floor(c.x), Math.floor(c.y))] ? PERISCOPE_DETECT : 1) *
       teamRoutes *
       diff *
       heatDetectMult(c) *

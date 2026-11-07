@@ -75,8 +75,6 @@ function yieldText(s: GameState, c: Crew, job: JobId, cyclesPerHour: number): st
       return `$${per((6 + stat(s, c, 'handy') * 2) * n)}/hr from ${per(10 * n)} parts`;
     case 'rig':
       return `−${((0.6 + stat(s, c, 'handy') * 0.3) * n).toFixed(1)} kWh/hr off a bill`;
-    case 'lookout':
-      return 'Bats under the periscope are harder to spot';
     case 'listings': {
       const mult = 0.7 + stat(s, c, 'charm') * 0.1;
       return `${range(30 * mult * n, 54 * mult * n, cash)}/hr, ${per(LOT * n)} goods/hr`;
