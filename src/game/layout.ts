@@ -213,7 +213,7 @@ const ROOM_SPECS: RoomDef[] = [
   room({ id: 'court', kind: 'court', name: 'Center Court', x0: 20, y0: 11, x1: 27, y1: 17, floor: 'court', floorColor: '#d9cdb8', accent: '#2aa6a0', noiseMask: 0.6, smellMask: 0.6, sensitivity: 0.4, traffic: 1.0, blurb: 'The fountain. The skylight. The heart of Northgate.' }),
 
   room({ id: 'abercromp', kind: 'store', name: 'American Eagle', x0: 6, y0: 16, x1: 10, y1: 22, floor: 'wood', floorColor: '#5a4330', accent: '#1a4b8c', noiseMask: 0.8, smellMask: 0.97, sensitivity: 0.55, traffic: 1.1, blurb: 'Pop radio and a cologne fog so thick you could cook a turkey up there.' }),
-  room({ id: 'boundaries', kind: 'store', name: 'Coles', x0: 11, y0: 16, x1: 14, y1: 22, floor: 'carpet', floorColor: '#5b3a3a', accent: '#c8102e', noiseMask: 0.05, smellMask: 0.35, sensitivity: 1.4, traffic: 0.7, blurb: 'Silent as a library. The Wi-Fi leaks through the ceiling.' }),
+  room({ id: 'boundaries', kind: 'store', name: 'Coles', x0: 11, y0: 16, x1: 14, y1: 22, floor: 'carpet', floorColor: '#5b3a3a', accent: '#c8102e', noiseMask: 0.05, smellMask: 0.35, sensitivity: 1.4, traffic: 0.7, blurb: 'Silent as a library.' }),
   room({ id: 'blockbusted', kind: 'store', name: 'Blockbuster', x0: 15, y0: 16, x1: 19, y1: 22, floor: 'carpet', floorColor: '#22306b', accent: '#1747a6', noiseMask: 0.35, smellMask: 0.2, sensitivity: 0.9, traffic: 0.8, closable: true, blurb: 'Be kind, rewind.', closingLine: 'Blockbuster is closing. Something about DVDs in red envelopes.' }),
   room({ id: 'claire', kind: 'store', name: "Claire's", x0: 20, y0: 18, x1: 21, y1: 22, floor: 'tile', floorColor: '#f3d9e6', accent: '#ff5fa8', noiseMask: 0.45, smellMask: 0.3, sensitivity: 0.8, traffic: 0.7, closable: true, blurb: 'Ear piercing guns and the screams that go with them.', closingLine: "Claire's is closing. They did not see it coming." }),
   room({ id: 'entrance', kind: 'entrance', name: 'South Entrance', x0: 22, y0: 18, x1: 25, y1: 23, floor: 'terrazzo', floorColor: '#ded3c2', accent: '#b9ab96', noiseMask: 0.45, smellMask: 0.5, sensitivity: 0.4, blurb: 'Automatic doors and a rack of free apartment guides.' }),
@@ -223,7 +223,7 @@ const ROOM_SPECS: RoomDef[] = [
   room({ id: 'zalez', kind: 'store', name: 'Charm Diamond Centres', x0: 37, y0: 16, x1: 41, y1: 22, floor: 'luxe', floorColor: '#f1ece0', accent: '#c9a23a', noiseMask: 0.05, smellMask: 0.1, sensitivity: 1.6, traffic: 0.5, blurb: 'Hushed, carpeted, and full of motion sensors. Do not build here.' }),
 
   room({ id: 'searz', kind: 'anchor', name: 'Sears', x0: 0, y0: 4, x1: 5, y1: 22, floor: 'tile', floorColor: '#d6d8dc', accent: '#1c4fa0', noiseMask: 0, smellMask: 0, sensitivity: 0, ceiling: false, traffic: 1.0, blurb: 'Anchor. Its own firewall. Walmart is through the store, on the other side. Generous return policy.' }),
-  room({ id: 'dillmans', kind: 'anchor', name: 'Future Shop', x0: 42, y0: 4, x1: 47, y1: 22, floor: 'tile', floorColor: '#d8d4d0', accent: '#c41230', noiseMask: 0, smellMask: 0, sensitivity: 0, ceiling: false, traffic: 1.0, blurb: 'Big-box electronics. Its own firewall. Returns leave through the dock.' }),
+  room({ id: 'dillmans', kind: 'anchor', name: 'Zellers', x0: 42, y0: 4, x1: 47, y1: 22, floor: 'tile', floorColor: '#d8d4d0', accent: '#c41230', noiseMask: 0, smellMask: 0, sensitivity: 0, ceiling: false, traffic: 1.0, blurb: 'Discount department store. Its own firewall. Returns leave through the dock.' }),
 ];
 
 function setEdge(layout: Layout, ax: number, ay: number, bx: number, by: number, type: number) {

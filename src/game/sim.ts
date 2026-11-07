@@ -234,12 +234,11 @@ function ebay(s: GameState, dt: number) {
   const d = getDerived(s);
   if (!d.pc || s.goods < 1 || (s.flags.blackoutUntil ?? 0) > s.time) return;
   s.ebayTimer += dt;
-  const period = 110 / Math.max(0.25, Math.sqrt(d.pcSignal));
-  if (s.ebayTimer < period) return;
+  if (s.ebayTimer < 110) return;
   s.ebayTimer = 0;
   const lot = Math.min(LOT, s.goods);
   s.goods -= lot;
-  const price = Math.round(rand.range(30, 54) * (lot / LOT) * (0.65 + 0.35 * d.pcSignal));
+  const price = Math.round(rand.range(30, 54) * (lot / LOT));
   earn(s, price);
   s.stats.ebaySold += lot;
   if (s.stats.ebaySold >= 50) unlock(s, 'POWERSELLER');
@@ -252,14 +251,14 @@ function refillPools(s: GameState) {
   const tf = seasonFactor(day) * (0.5 + 0.6 * s.mallHealth);
   const open = (id: string) => !s.rooms[LAYOUT.roomIndex[id]].vacant;
   s.pools.fountain = Math.round(30 + 90 * tf);
-  s.pools.dumpster = Math.round(6 + 9 * tf);
-  s.pools.vending = 5;
+  s.pools.dumpster = Math.round(12 + 18 * tf);
+  s.pools.vending = 10;
   s.pools.arcade = open('funzone') ? Math.round(60 + 140 * tf) : 0;
   s.pools.radiohut = open('radiohut') ? 55 : 0;
   s.pools.pallets = Math.round(60 + 40 * tf);
   s.pools.stockroom = 45;
   s.pools.lostfound = 5 + (tf > 1.5 ? 3 : 0);
-  s.pools.samples = Math.round(8 + 4 * tf);
+  s.pools.samples = Math.round(16 + 8 * tf);
 }
 
 function newDay(s: GameState) {

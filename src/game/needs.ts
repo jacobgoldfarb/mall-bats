@@ -3,8 +3,8 @@ import type { Crew, GameState } from './state';
 import { dayOf, isCold } from './time';
 import { getDerived } from './world';
 
-export const FOOD_PRICE = 4;
-export const MEALTIME_PRICE = 6;
+export const FOOD_PRICE = 2;
+export const MEALTIME_PRICE = 3;
 export const MEAL_HOURS = [8, 20];
 export const LOW_MOOD = 30;
 export const GREAT_MOOD = 80;

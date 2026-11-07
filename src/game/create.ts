@@ -75,7 +75,7 @@ export function newGame(player: PlayerSetup, difficulty: Difficulty, seed = Math
     over: null,
   };
   s.lastDay = dayOf(s.time - 360);
-  s.pools = { fountain: 60, dumpster: 12, vending: 5, arcade: 0, radiohut: 0, pallets: 0, lostfound: 0, samples: 0, zalez: 1 };
+  s.pools = { fountain: 60, dumpster: 24, vending: 10, arcade: 0, radiohut: 0, pallets: 0, lostfound: 0, samples: 0, zalez: 1 };
   updateCameras(s);
 
   const me = makeCandidate(s, 'drifter');

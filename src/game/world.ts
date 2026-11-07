@@ -19,7 +19,6 @@ export interface Derived {
   workbenches: Placed[];
   leisure: Placed[];
   pc: Placed | null;
-  pcSignal: number;
   scanner: boolean;
   fridge: boolean;
   signs: Placed[];
@@ -57,20 +56,10 @@ export function getDerived(s: GameState): Derived {
   return derived;
 }
 
-export function boundariesSignal(x: number, y: number): number {
-  const r = LAYOUT.rooms[LAYOUT.roomIndex['boundaries']];
-  const cx = Math.max(r.x0, Math.min(r.x1, x));
-  const cy = Math.max(r.y0, Math.min(r.y1, y));
-  const d = Math.hypot(cx - x, cy - y);
-  return Math.max(0, 1 - d / 10);
-}
-
 export function storeHasPower(s: GameState, roomIdx: number): boolean {
   const rs = s.rooms[roomIdx];
   return !rs.vacant || rs.popup;
 }
-
-export const wifiAt = (s: GameState, x: number, y: number) => (storeHasPower(s, LAYOUT.roomIndex['boundaries']) ? boundariesSignal(x, y) : 0);
 
 function computeDerived(s: GameState): Derived {
   const objAt = new Map<number, Placed>();
@@ -94,7 +83,6 @@ function computeDerived(s: GameState): Derived {
     workbenches: [],
     leisure: [],
     pc: null,
-    pcSignal: 0,
     scanner: false,
     fridge: false,
     signs: [],
@@ -157,10 +145,7 @@ function computeDerived(s: GameState): Derived {
     if (o.type === 'hot_plate' && o.powered) d.hotPlates.push(o);
     if (o.type === 'workbench' && o.powered) d.workbenches.push(o);
     if (def.hangout && o.powered) d.leisure.push(o);
-    if (o.type === 'pc' && o.powered) {
-      d.pc = o;
-      d.pcSignal = wifiAt(s, o.x, o.y);
-    }
+    if (o.type === 'pc' && o.powered) d.pc = o;
     if (o.type === 'scanner' && o.powered) d.scanner = true;
     if (o.type === 'fridge' && o.powered) d.fridge = true;
     if (def.insulation) {
@@ -250,7 +235,6 @@ export function canPlace(s: GameState, type: BuildId, x: number, y: number, movi
   const here = getDerived(s).objAt.get(i);
   if (here && here !== moving) return 'Something is already here';
   if (def.unique && s.objects.some((o) => o.type === type && o !== moving)) return 'You can only have one';
-  if (type === 'pc' && wifiAt(s, x, y) <= 0) return storeHasPower(s, LAYOUT.roomIndex['boundaries']) ? 'No Wi-Fi here. Get closer to Coles' : 'Coles closed. The Wi-Fi went with it.';
   if (type === 'splice') {
     const ri = LAYOUT.roomAt[i];
     if (!storeHasPower(s, ri)) return 'This store is vacant. The power is cut.';

@@ -187,8 +187,8 @@ const SCRIPT: Scripted[] = [
     hour: 5,
     key: 'blackfriday',
     run: (s) => {
-      pa(s, 'BLACK FRIDAY! Doors are OPEN! Doorbusters at Sears and Future Shop! Please do not trample your fellow shoppers!');
-      log(s, 'Black Friday. The mall is deafening. Nobody will hear a thing upstairs, and Future Shop shoppers will pay cash to skip the line.', 'good');
+      pa(s, 'BLACK FRIDAY! Doors are OPEN! Doorbusters at Sears and Zellers! Please do not trample your fellow shoppers!');
+      log(s, 'Black Friday. The mall is deafening. Nobody will hear a thing upstairs, and Zellers shoppers will pay cash to skip the line.', 'good');
     },
   },
   { day: 60, hour: 9, key: 'closeClaire', run: (s) => closeStore(s, 'claire') },
@@ -331,7 +331,7 @@ const RANDOM_EVENTS: RandomEvent[] = [
     when: () => true,
     run: (s) => {
       s.pools.pallets = (s.pools.pallets ?? 0) + 50;
-      log(s, 'Future Shop dumped a truckload of returns on the dock. Dock Pallets is stacked tonight.', 'good');
+      log(s, 'Zellers dumped a truckload of returns on the dock. Dock Pallets is stacked tonight.', 'good');
     },
   },
   {

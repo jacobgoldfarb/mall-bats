@@ -30,7 +30,7 @@ import { ACHIEVEMENTS, suspicionDecay, suspicionLevel, auctionBid, levelOf } fro
 import { KIOSK_COST, POPUP_COST, POPUP_RENT, buildCost, buyFood, clearJam, demolishAt, leaseKiosk, noiseField, openPopup, popupName, popupWalkIns, powerCap, rotateObject } from '../game/sim';
 import type { Crew, GameState, Inspection, Placed } from '../game/state';
 import { AUCTION_DAY, dayOf, formatClock, formatDate, morningOf, phaseAt, phaseLabel } from '../game/time';
-import { getDerived, wifiAt } from '../game/world';
+import { getDerived } from '../game/world';
 import { crewSprite } from '../render/renderer';
 import { Icon } from './icons';
 import { Delta } from './delta';
@@ -936,7 +936,6 @@ export function Tooltip({ s }: { s: GameState }) {
         <div class="tt-line">
           <b>{BUILD[obj.type].name}</b> {BUILD[obj.type].power ? obj.powered ? <span class="good">· powered</span> : <span class="bad">· no power</span> : ''}
           {BUILD[obj.type].supply ? ` · ${obj.supplyLoad}/${BUILD[obj.type].supply}W` : ''}
-          {obj.type === 'pc' ? ` · Wi-Fi ${Math.round(wifiAt(s, obj.x, obj.y) * 100)}%` : ''}
         </div>
       )}
       {pet && (

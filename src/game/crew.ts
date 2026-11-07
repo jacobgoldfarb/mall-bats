@@ -265,8 +265,7 @@ export function jobBlocked(s: GameState, c: Crew, job: JobId): string | null {
       if (s.parts < SCRAP_PARTS) return `Needs ${SCRAP_PARTS} parts`;
       break;
     case 'listings':
-      if (d.pcSignal <= 0) return 'The PC has no Wi-Fi';
-      if (s.goods < 1) return 'No goods to list';
+      if (s.goods < 1) return 'No goods to sell';
       break;
     case 'gary':
       if (s.gary.recruited) return 'Gary is one of us now';
@@ -440,13 +439,13 @@ function doCycle(s: GameState, c: Crew, job: JobId): boolean {
       return got > 0;
     }
     case 'dumpster': {
-      const got = take('dumpster', rand.int(1, 2));
+      const got = take('dumpster', rand.int(2, 4));
       k.food += got;
       if (rand.chance(0.12)) k.parts += 5;
       return got > 0;
     }
     case 'vending': {
-      k.food += take('vending', 1);
+      k.food += take('vending', 2);
       k.cash += rand.int(0, 3);
       return (s.pools.vending ?? 0) > 0;
     }
@@ -499,7 +498,7 @@ function doCycle(s: GameState, c: Crew, job: JobId): boolean {
       return true;
     }
     case 'samples': {
-      const got = take('samples', 1);
+      const got = take('samples', 2);
       k.food += got;
       return got > 0;
     }
@@ -564,8 +563,16 @@ function doCycle(s: GameState, c: Crew, job: JobId): boolean {
     }
     case 'listings': {
       if (s.goods < 1) return false;
-      s.ebayTimer += 20 + stat(s, c, 'charm') * 5;
-      return true;
+      const lot = Math.min(LOT, s.goods);
+      s.goods -= lot;
+      const got = Math.round(rand.range(30, 54) * (lot / LOT) * (0.7 + stat(s, c, 'charm') * 0.1));
+      earn(s, got);
+      c.earned += got;
+      s.stats.ebaySold += lot;
+      if (s.stats.ebaySold >= 50) unlock(s, 'POWERSELLER');
+      c.bubble = { text: `+$${got}`, until: s.time + 8, tone: 'happy' };
+      sfx('cash');
+      return s.goods > 0;
     }
     case 'lookout':
       return true;

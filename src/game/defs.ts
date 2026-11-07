@@ -105,7 +105,7 @@ const BUILDS_AS_WRITTEN: BuildDef[] = [
 
   { id: 'workbench', name: 'Workbench', category: 'work', cost: 150, parts: 20, level: 4, power: 30, noise: 3.4, noiseWhen: 'use', light: 2, lightColor: '255,240,200', desc: 'Turns parts into goods. One Bat at a time, and loud.', flavor: 'Refurbished means it worked once.' },
   { id: 'siphon', name: 'Coin Siphon', category: 'work', cost: 180, parts: 25, level: 7, power: 10, racket: true, desc: 'Skims the registers below while the mall is open. Jams sometimes.', flavor: 'Every till in Northgate comes up a little short. Nobody can prove why.' },
-  { id: 'pc', name: 'Beige Box PC', category: 'work', cost: 260, parts: 30, level: 7, power: 50, unique: true, light: 1.6, lightColor: '140,255,190', desc: 'Sells goods on eBay while you sleep. Needs Coles Wi-Fi.', flavor: 'Leeching the store Wi-Fi. 56k would be faster.' },
+  { id: 'pc', name: 'Beige Box PC', category: 'work', cost: 260, parts: 30, level: 7, power: 50, unique: true, light: 1.6, lightColor: '140,255,190', desc: 'Sells goods on eBay while you sleep.', flavor: 'The fan sounds like a dial-up handshake.' },
   { id: 'raccoon', name: 'Decoy Raccoon', category: 'stealth', cost: 25, level: 5, decoy: true, desc: 'Inspectors blame the raccoon and leave. Single use.', flavor: '"It was raccoons." The oldest excuse in the book.' },
   { id: 'asbestos', name: 'Asbestos Warning Sign', category: 'stealth', cost: 40, level: 5, floor: true, deterRadius: 3, deterUses: 2, desc: 'Inspectors take one look and turn around. Good for two.', flavor: "DANGER. ASBESTOS. AUTHORIZED PERSONNEL ONLY. Laminated at Kinko's." },
   { id: 'wet_floor', name: 'Wet Floor Sign', category: 'stealth', cost: 15, level: 5, floor: true, lastsDays: 3, desc: 'Guards and the janitor walk around it.', flavor: 'CUIDADO. PISO MOJADO. Nobody questions the yellow sign.' },
@@ -197,15 +197,15 @@ export const JOBS: JobDef[] = [
   { id: 'arcade', name: 'Token Shake', shift: 'night', spot: 'arcade', level: 2, stat: 'handy', cycle: 20, sketch: 0, desc: "Galaxy's token machine has a loose panel. Galaxy counts its tokens.", yields: '$$', risk: 'medium' },
   { id: 'radiohut', name: 'The Source Salvage', shift: 'night', spot: 'radiohut', level: 4, stat: 'handy', cycle: 30, sketch: 0, desc: 'The back room is full of returns marked DEFECTIVE. The Source counts its stock.', yields: 'Parts', risk: 'medium' },
   { id: 'stockroom', name: 'Stockroom Pilfer', shift: 'night', spot: 'stockroom', level: 2, stat: 'stealth', cycle: 25, sketch: 0, desc: 'Back-of-house overflow boxes. Busted electronics nobody will miss... much.', yields: 'Parts, sometimes goods', risk: 'low' },
-  { id: 'pallets', name: 'Dock Pallets', shift: 'night', spot: 'pallets', level: 4, stat: 'handy', cycle: 25, sketch: 0, desc: 'Return-to-vendor pallets from Future Shop. Nobody inventories broken stuff.', yields: 'Parts', risk: 'low' },
+  { id: 'pallets', name: 'Dock Pallets', shift: 'night', spot: 'pallets', level: 4, stat: 'handy', cycle: 25, sketch: 0, desc: 'Return-to-vendor pallets from Zellers. Nobody inventories broken stuff.', yields: 'Parts', risk: 'low' },
   { id: 'lostfound', name: 'Lost & Found Raid', shift: 'night', spot: 'lostfound', level: 7, stat: 'stealth', cycle: 45, sketch: 0, desc: 'Inside the Security Office. While Gary is out on patrol.', yields: 'Goods, $, parts', risk: 'high' },
   { id: 'zalez', name: 'The Charm Job', shift: 'night', spot: 'zalez', level: 9, stat: 'stealth', cycle: 60, sketch: 0, desc: 'Rope down into Charm Diamond Centres and empty one display case.', yields: '$$$$, once', risk: 'high' },
-  { id: 'doorbuster', name: 'Hold a Spot in Line', shift: 'day', spot: 'doorbuster', only: [11, 26], level: 1, stat: 'charm', cycle: 20, sketch: 0, desc: 'Shoppers pay cash to skip the Future Shop doorbuster line.', yields: '$$', risk: 'low' },
+  { id: 'doorbuster', name: 'Hold a Spot in Line', shift: 'day', spot: 'doorbuster', only: [11, 26], level: 1, stat: 'charm', cycle: 20, sketch: 0, desc: 'Shoppers pay cash to skip the Zellers doorbuster line.', yields: '$$', risk: 'low' },
   { id: 'tinker', name: 'Tinker at Workbench', shift: 'both', home: ['workbench'], level: 4, stat: 'handy', cycle: 75, sketch: 0, desc: 'Parts in, goods out. Loud.', yields: 'Parts → Goods', risk: 'none' },
   { id: 'scrap', name: 'Sort the Haul', shift: 'both', home: ['crate'], level: 3, stat: 'handy', cycle: 30, sketch: 0, desc: 'Strip junk parts for copper. Earl buys it for his brother-in-law.', yields: 'Parts → $', risk: 'none' },
   { id: 'rig', name: 'Rig the Meters', shift: 'both', home: ['splice'], level: 4, stat: 'handy', cycle: 45, sketch: 0, desc: 'Fiddle with a splice so the meter downstairs reads low.', yields: 'Smaller power bill', risk: 'none' },
   { id: 'lookout', name: 'Periscope Lookout', shift: 'night', home: ['periscope'], level: 5, stat: 'stealth', cycle: 30, sketch: 0, desc: 'Watch the flashlights and whisper directions down the vent.', yields: 'Bats below are harder to spot', risk: 'none' },
-  { id: 'listings', name: 'Write eBay Listings', shift: 'both', home: ['pc'], level: 7, stat: 'charm', cycle: 30, sketch: 0, desc: '"VINTAGE!! L@@K!! RARE." Good copy sells faster.', yields: 'Faster eBay sales', risk: 'none' },
+  { id: 'listings', name: 'Sell on eBay', shift: 'both', home: ['pc'], level: 7, stat: 'charm', cycle: 45, sketch: 0, desc: 'Post the lot. The PayPal email does the rest.', yields: 'Goods → $', risk: 'none' },
 ];
 
 export const isHomeJob = (job: JobId) => !!JOB[job].home;

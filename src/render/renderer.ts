@@ -6,7 +6,7 @@ import { drawHeatMap } from './heat';
 import type { Crew, GameState, Npc, Placed } from '../game/state';
 import { dayOf, formatClock, minuteOfDay, morningOf, phaseAt } from '../game/time';
 import { INSPECTORS, forecastInspection, forecastLabel } from '../game/inspect';
-import { CAMERA_FOV, CAMERA_RANGE, cameraAngle, cameraLive, canPlace, sightPolygon, wifiAt } from '../game/world';
+import { CAMERA_FOV, CAMERA_RANGE, cameraAngle, cameraLive, canPlace, sightPolygon } from '../game/world';
 import { popupName } from '../game/sim';
 import { BODY_FONT, DISPLAY_FONT, bubble, box, diamondPath, drawPerson, drawPet, faceQuad, isoText, roundRect, type Ctx, type WorkMotion } from './draw';
 import { TH, TW, isoX, isoY, mix, screenToWorld, shade, type Camera } from './iso';
@@ -1132,7 +1132,6 @@ export class Renderer {
 
   private drawPowerOverlay(s: GameState) {
     const ctx = this.ctx;
-    const pc = s.objects.find((o) => o.type === 'pc');
     for (const o of s.objects) {
       const def = BUILD[o.type];
       if (def.supply) {
@@ -1156,11 +1155,6 @@ export class Renderer {
         ctx.textAlign = 'center';
         ctx.fillText(o.powered ? '⚡' : '✕', isoX(o.x + 0.5, o.y + 0.5), isoY(o.x + 0.5, o.y + 0.5, 30));
       }
-    }
-    if (pc) {
-      ctx.fillStyle = '#5aff8a';
-      ctx.font = `600 10px ${BODY_FONT}`;
-      ctx.fillText(`Wi-Fi ${Math.round(wifiAt(s, pc.x, pc.y) * 100)}%`, isoX(pc.x + 0.5, pc.y + 0.5), isoY(pc.x + 0.5, pc.y + 0.5, 40));
     }
   }
 
@@ -1359,12 +1353,6 @@ export class Renderer {
           else ctx.ellipse(isoX(x + 0.5, y + 0.5), isoY(x + 0.5, y + 0.5), rad * TW * 0.707, rad * TH * 0.707, 0, 0, Math.PI * 2);
           ctx.stroke();
           ctx.setLineDash([]);
-        }
-        if (v.build === 'pc') {
-          ctx.fillStyle = '#5aff8a';
-          ctx.font = `600 11px ${BODY_FONT}`;
-          ctx.textAlign = 'center';
-          ctx.fillText(`Wi-Fi ${Math.round(wifiAt(s, x, y) * 100)}%`, isoX(x + 0.5, y + 0.5), isoY(x + 0.5, y + 0.5, 40));
         }
       }
       if (tiles.length > 1) {

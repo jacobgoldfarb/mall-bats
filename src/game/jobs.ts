@@ -40,11 +40,11 @@ function yieldText(s: GameState, c: Crew, job: JobId, cyclesPerHour: number): st
       return `${range(base * 0.6, base * 1.4, cash)}/hr`;
     }
     case 'dumpster':
-      return `${per(1.5 * n)} food/hr`;
+      return `${per(3 * n)} food/hr`;
     case 'vending':
-      return `${per(n)} food + $${per(1.5 * n)}/hr`;
+      return `${per(2 * n)} food + $${per(1.5 * n)}/hr`;
     case 'samples':
-      return `${per(n)} food/hr`;
+      return `${per(2 * n)} food/hr`;
     case 'radiohut':
       return `${per((stat(s, c, 'handy') >= 4 ? 10 : 5) * n)} parts/hr`;
     case 'pallets':
@@ -77,8 +77,10 @@ function yieldText(s: GameState, c: Crew, job: JobId, cyclesPerHour: number): st
       return `−${((0.6 + stat(s, c, 'handy') * 0.3) * n).toFixed(1)} kWh/hr off a bill`;
     case 'lookout':
       return 'Bats under the periscope are harder to spot';
-    case 'listings':
-      return `eBay sells about ${Math.round((100 * (20 + stat(s, c, 'charm') * 5)) / 30)}% faster`;
+    case 'listings': {
+      const mult = 0.7 + stat(s, c, 'charm') * 0.1;
+      return `${range(30 * mult * n, 54 * mult * n, cash)}/hr, ${per(LOT * n)} goods/hr`;
+    }
     case 'doorbuster':
       return `${range((3 + stat(s, c, 'charm') * 2) * 0.7 * n, (3 + stat(s, c, 'charm') * 2) * 1.3 * n, cash)}/hr`;
     case 'zalez':
