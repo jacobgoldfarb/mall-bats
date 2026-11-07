@@ -815,9 +815,9 @@
   "build.sleeping_bag.sleeper": [
    {
     "file": "build.sleeping_bag.sleeper.png",
-    "w": 44,
-    "h": 27,
-    "base": 44
+    "w": 43,
+    "h": 26,
+    "base": 43
    }
   ],
   "build.futon.sleeper": [
@@ -866,6 +866,14 @@
     "w": 81,
     "h": 90,
     "base": 81
+   }
+  ],
+  "build.hotdog": [
+   {
+    "file": "build.hotdog.png",
+    "w": 18,
+    "h": 58,
+    "base": 18
    }
   ]
  },
@@ -1008,6 +1016,40 @@
    "walk": 6,
    "sneak": 0,
    "footY": 46
+  },
+  "char.crew.drifter.f": {
+   "file": "char.crew.drifter.f.png",
+   "frame": 48,
+   "dirs": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+   ],
+   "walk": 6,
+   "sneak": 0,
+   "footY": 47
+  },
+  "char.costume.hotdog": {
+   "file": "char.costume.hotdog.png",
+   "frame": 48,
+   "dirs": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+   ],
+   "walk": 6,
+   "sneak": 0,
+   "footY": 47
   },
   "char.crew.mallrat": {
    "file": "char.crew.mallrat.png",
@@ -1283,6 +1325,23 @@
   },
   "char.npc.dog": {
    "file": "char.npc.dog.png",
+   "frame": 48,
+   "dirs": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+   ],
+   "walk": 6,
+   "sneak": 0,
+   "footY": 47
+  },
+  "char.npc.bandit": {
+   "file": "char.npc.bandit.png",
    "frame": 48,
    "dirs": [
     "south",

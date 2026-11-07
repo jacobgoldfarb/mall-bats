@@ -1,7 +1,8 @@
 import { BUILD, LOT, NOOK_SMELL, canRotate, type BuildId } from './defs';
 import { agentNode, coolHeat, crewLeaves, crowdNow, idleBubble, noiseFromCrew, sendCrewHome, updateCrew } from './crew';
 import { dailyCandidates, randomHourly, runScript } from './events';
-import { ferretForage } from './hijinx';
+import { banditForage, updateBandit } from './bandit';
+import { costumesWearOff, ventOfferings } from './hijinx';
 import { FATIGUE_KEPT_PER_DAY, inspectionHotspotUpdate, rollInspection, scheduleInspection } from './inspect';
 import { LAYOUT, N, W, H, idx, inBounds } from './layout';
 import { FOOD_PRICE, MEAL_HOURS, hourlyMood, serveMeal } from './needs';
@@ -10,7 +11,7 @@ import { auctionBid, earn, log, pa, pressure, raiseSuspicion, rand, sfx, suspici
 import { detection, ensureStaff, spawnShopper, startInspector, trackStaffDoors, updateCrewDanger, updateMallItems, updateNpcs } from './npc';
 import type { GameState, Placed } from './state';
 import { AUCTION_DAY, dayOf, md, minuteOfDay, phaseAt, seasonFactor, weekday, type Phase } from './time';
-import { canPlace, getDerived, markDirty, roomTiles } from './world';
+import { addObject, canPlace, getDerived, markDirty, roomTiles } from './world';
 
 export const noiseField = new Float32Array(N);
 
@@ -260,7 +261,9 @@ function newDay(s: GameState) {
   s.dailyIncome.push(Math.round(s.todayIncome));
   s.todayIncome = 0;
   dailyCandidates(s);
-  ferretForage(s);
+  banditForage(s);
+  ventOfferings(s);
+  costumesWearOff(s);
   if (day >= 3) log(s, `Day ${day + 1}. Developer bid: $${auctionBid(s).toLocaleString()}. Cash: $${Math.floor(s.cash).toLocaleString()}.`, 'info');
 }
 
@@ -336,6 +339,7 @@ function substep(s: GameState, dt: number) {
     coolHeat(c, dt);
     trackStaffDoors(s, c, before);
   }
+  updateBandit(s, dt);
   detection(s, dt);
 
   for (const ins of s.inspections) if (ins.state === 'scheduled' && ins.at <= s.time) startInspector(s, ins.id);
@@ -379,9 +383,7 @@ export function placeObject(s: GameState, type: BuildId, x: number, y: number, f
     return null;
   }
   const nooksBefore = getDerived(s).nooks.length;
-  const id = s.nextId++;
-  s.objects.push({ id, type, x, y, powered: false, tapRoom: -1, usedUntil: 0, supplyLoad: 0, flipped: flipped && canRotate(type) });
-  markDirty();
+  const { id } = addObject(s, type, x, y, flipped && canRotate(type));
   const formed = getDerived(s).nooks.find((n) => n.members.some((m) => m.id === id));
   if (formed && getDerived(s).nooks.length > nooksBefore) {
     log(s, `${formed.def.name} is set up. ${formed.def.bonus}.`, 'good', { x, y, layer: 1 });

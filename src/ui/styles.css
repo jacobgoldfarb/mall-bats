@@ -2727,6 +2727,36 @@ button {
   accent-color: var(--pink-2);
 }
 
+.who {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.newgame .who .field {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.bodies {
+  display: flex;
+  gap: 8px;
+}
+
+.body {
+  padding: 0;
+  border: 0;
+  line-height: 0;
+  background: none;
+  box-shadow: inset 0 -2px 0 var(--plum-0);
+  cursor: pointer;
+}
+
+.body.on {
+  box-shadow: 0 0 0 2px var(--pink-3);
+}
+
 .diffs {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

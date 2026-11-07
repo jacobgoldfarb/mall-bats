@@ -197,6 +197,13 @@ export const ASSETS: AssetSpec[] = [
   build('hammock.sleeper', 'striped hammock strung between two silver ducts, sagging with a person asleep inside wrapped in a blanket', 'one arm hanging over the edge', [64, 48], 56),
   build('floor_sleeper', 'person asleep curled up on bare plywood under a faded denim jacket, using a backpack as a pillow', 'a hole in one sock', [48, 32], 40),
   build('ac', 'large gray rooftop hvac air handler unit with a big round fan grille on top', 'a pigeon feather', [128, 96], 120),
+  build(
+    'hotdog',
+    'six foot foam hot dog mascot costume hanging empty from a wire coat hanger on a broom handle stand, red sausage in a tan bun with a yellow mustard squiggle and an empty round face hole',
+    'a tiny paper flag taped to the broom handle',
+    [40, 64],
+    28,
+  ),
 
   floor('tile', 'light gray square ceramic floor tile with thin darker grout lines on the edges, subtle scuffs', 32, true),
   floor('terrazzo', 'cream terrazzo floor with small speckles of rust, teal and gray chips', 32),
@@ -213,6 +220,8 @@ export const ASSETS: AssetSpec[] = [
   floor('deck', 'raw plywood sheet, light wood grain, a few nail heads', 32),
 
   char('crew.drifter', 'scruffy evicted drifter man in a faded blue hoodie and gray beanie, stubble, overstuffed backpack'),
+  char('crew.drifter.f', 'scruffy evicted drifter woman in a faded blue hoodie and gray beanie, messy brown ponytail, overstuffed backpack'),
+  char('costume.hotdog', 'person wearing a six foot foam hot dog mascot costume, red sausage body inside a tan bun, yellow mustard squiggle down the front, face peeking out of a round face hole, black sneakers'),
   char('crew.mallrat', 'teen mall rat boy in a pastel pink polo, trucker hat, puka shell necklace, frosted tips'),
   char('crew.goth', 'goth teen girl in a black band tee and baggy black pants with chains, pale, dark lipstick, black hair'),
   char('crew.searz', 'middle aged laid off hardware clerk in a blue work vest with name tag, khakis, gray hair, reading glasses'),
@@ -231,6 +240,7 @@ export const ASSETS: AssetSpec[] = [
   char('npc.janitor', 'mall janitor in gray green coveralls holding a mop, earbuds in'),
   char('npc.inspector', 'fire code inspector in an orange safety vest and yellow hard hat, holding a clipboard'),
   char('npc.dog', 'german shepherd police k9 dog wearing a black vest', { template: 'dog' }),
+  char('npc.bandit', 'small cream and tan pet ferret with a dark brown mask, pink nose and a long low body', { template: 'dog' }),
 
   char('shopper.teen', 'teen girl in a pink velour tracksuit, flip phone in hand, shopping bag'),
   char('shopper.dad', 'suburban dad in cargo shorts, tucked in polo, white sneakers, fanny pack'),

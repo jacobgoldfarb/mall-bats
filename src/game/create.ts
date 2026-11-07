@@ -7,7 +7,12 @@ import { markDirty } from './world';
 
 export const SAVE_VERSION = 4;
 
-export function newGame(playerName: string, difficulty: Difficulty, seed = Math.floor(Math.random() * 1e9)): GameState {
+export interface PlayerSetup {
+  name: string;
+  sprite?: string;
+}
+
+export function newGame(player: PlayerSetup, difficulty: Difficulty, seed = Math.floor(Math.random() * 1e9)): GameState {
   rand.state = seed;
   const s: GameState = {
     version: SAVE_VERSION,
@@ -15,7 +20,7 @@ export function newGame(playerName: string, difficulty: Difficulty, seed = Math.
     rng: seed,
     time: 21 * 60 + 35,
     difficulty,
-    playerName,
+    playerName: player.name,
     cash: { easy: 150, normal: 110, hard: 80 }[difficulty],
     food: 6,
     parts: 20,
@@ -74,10 +79,10 @@ export function newGame(playerName: string, difficulty: Difficulty, seed = Math.
   updateCameras(s);
 
   const me = makeCandidate(s, 'drifter');
-  me.name = playerName;
+  me.name = player.name;
+  me.sprite = player.sprite;
   me.bio = 'Got evicted on a Tuesday. Found the ladder on a Friday.';
-  const player = addCrew(s, me);
-  player.energy = 55;
+  addCrew(s, me).energy = 55;
 
   pa(s, 'Attention shoppers: Northgate Mall is now closed. Please make your way to the nearest exit.');
   log(s, 'You are in the ceiling above the Service Corridor. Lay some plywood before you put a foot through a tile.', 'info');

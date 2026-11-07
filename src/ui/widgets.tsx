@@ -6,7 +6,7 @@ import { isoX, isoY } from '../render/iso';
 import { drawBuildable } from '../render/objects';
 import { characterSprite, drawPortrait } from '../render/sprites';
 
-export function Portrait({ look, sprite, size = 44, bg = '#1a2040' }: { look: Look; sprite?: string; size?: number; bg?: string }) {
+export function Portrait({ look, sprite, size = 44, bg = '#1a2040' }: { look?: Look; sprite?: string; size?: number; bg?: string }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const c = ref.current!;
@@ -22,6 +22,7 @@ export function Portrait({ look, sprite, size = 44, bg = '#1a2040' }: { look: Lo
     ctx.fillRect(0, 0, size, size);
     const s = sprite ? characterSprite(sprite) : null;
     if (s) return drawPortrait(ctx, s, size);
+    if (!look) return;
     const scale = size / 26;
     ctx.save();
     ctx.translate(size / 2, size * 1.25);

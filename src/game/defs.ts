@@ -38,7 +38,8 @@ export type BuildId =
   | 'ball_pit'
   | 'wet_floor'
   | 'out_of_order'
-  | 'tamagotchi';
+  | 'tamagotchi'
+  | 'hotdog';
 
 export type BuildCategory = 'structure' | 'living' | 'food' | 'stealth' | 'work';
 
@@ -82,6 +83,7 @@ export interface BuildDef {
   deterUses?: number;
   hangout?: string;
   racket?: boolean;
+  gift?: boolean;
 }
 
 const BUILDS_AS_WRITTEN: BuildDef[] = [
@@ -127,6 +129,8 @@ const BUILDS_AS_WRITTEN: BuildDef[] = [
   { id: 'ball_pit', name: 'Ball Pit', category: 'living', cost: 300, parts: 10, level: 9, seat: true, comfort: 7, noise: 1.5, noiseWhen: 'use', hangout: 'Swimming in the ball pit', desc: '+7 comfort. Rustles.', flavor: 'Galaxy condemned it. Galaxy was right.' },
   { id: 'throne', name: 'The Throne', category: 'living', cost: 1200, parts: 30, level: 10, seat: true, power: 30, comfort: 16, unique: true, light: 3, lightColor: '255,215,90', hangout: 'Sitting on the throne', desc: '+16 comfort. Every kingdom needs one.', flavor: 'A Sharper Idea massage chair. It hums.' },
   { id: 'hot_tub', name: 'Hot Tub', category: 'living', cost: 650, parts: 35, level: 10, seat: true, power: 80, comfort: 10, noise: 1.2, noiseWhen: 'use', light: 2.4, lightColor: '43,255,240', hangout: 'Soaking in the hot tub', desc: '+10 comfort. Bubbles.', flavor: "Spa Depot's floor model. Filled one bucket at a time from the janitor's sink." },
+
+  { id: 'hotdog', name: 'The Hot Dog', category: 'living', cost: 0, level: 1, gift: true, unique: true, comfort: 3, desc: '+3 comfort. The crew salutes it before bed.', flavor: 'Six feet of foam from the Food Court dumpster. It watches over us.' },
 ];
 
 export const BUILDS: BuildDef[] = [...BUILDS_AS_WRITTEN].sort((a, b) => a.level - b.level);
@@ -254,6 +258,40 @@ export const ARCHETYPES: Archetype[] = [
   { id: 'gary', title: 'Former Night Guard', stealth: 4, charm: 2, handy: 3, traits: ['routes'], bios: ['Gary knows. Gary has always known. Gary is in.'], look: { hat: 'cap', top: ['#22304a'], hair: ['#5a4a3a'] } },
 ];
 
+export const PLAYER_BODIES = [
+  { id: 'he', name: 'Jace', sprite: 'char.crew.drifter' },
+  { id: 'she', name: 'Jess', sprite: 'char.crew.drifter.f' },
+] as const;
+
+export type CostumeId = 'hotdog' | 'mallwalker';
+
+export interface CostumeDef {
+  name: string;
+  desc: string;
+  sprite?: string;
+  dayHeat: number;
+  nightDetect: number;
+  busk: number;
+}
+
+export const COSTUMES: Record<CostumeId, CostumeDef> = {
+  hotdog: {
+    name: 'Hot Dog Suit',
+    desc: 'Day jobs build no Heat and busking pays more. Hard to miss at night.',
+    sprite: 'char.costume.hotdog',
+    dayHeat: 0,
+    nightDetect: 1.25,
+    busk: 1.5,
+  },
+  mallwalker: {
+    name: 'Mallwalker',
+    desc: 'Day jobs build half the Heat.',
+    dayHeat: 0.5,
+    nightDetect: 1,
+    busk: 1,
+  },
+};
+
 export type NookId = 'movie' | 'kitchen' | 'workshop' | 'bunkroom' | 'rumpus' | 'spa';
 
 export interface NookDef {
@@ -342,7 +380,7 @@ export const levelInfo = (level: number) => LEVELS[level - 1];
 
 export function unlocksAt(level: number): string[] {
   return [
-    ...BUILDS.filter((b) => b.level === level).map((b) => b.name),
+    ...BUILDS.filter((b) => b.level === level && !b.gift).map((b) => b.name),
     ...(level === KIOSK_LEVEL ? ['Kiosk lease'] : []),
     ...(level === POPUP_LEVEL ? ['Pop-up lease'] : []),
     ...JOBS.filter((j) => j.level === level && j.id !== 'rest').map((j) => `${j.name} job`),

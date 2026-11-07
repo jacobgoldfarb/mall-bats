@@ -1,4 +1,4 @@
-import type { Look } from '../game/state';
+import type { Look, Pet } from '../game/state';
 import { isoX, isoY, shade } from './iso';
 import { characterSprite, drawCharacterFrame, screenDirection, type CharacterSprite } from './sprites';
 
@@ -197,6 +197,25 @@ function drawSpritePerson(ctx: Ctx, sprite: CharacterSprite, px: number, py: num
     if (dog) drawCharacterFrame(ctx, dog, px - 14 * flip, py + 4, dir, o.walking && dog.walk ? 1 + (frame % dog.walk) : 0);
     else drawDog(ctx, px - 12 * flip, py + 3, o.t, o.walking, flip);
   }
+}
+
+const PET_SCALE = 0.5;
+
+export function drawPet(ctx: Ctx, pet: Pet, px: number, py: number, t: number) {
+  const sprite = characterSprite('char.npc.bandit');
+  ellipse(ctx, px, py, 5, 2, 'rgba(0,0,0,0.25)');
+  if (!sprite) return;
+  const col = pet.moving && sprite.walk ? 1 + (Math.floor(t * WALK_FPS * 1.5) % sprite.walk) : 0;
+  drawCharacterFrame(ctx, sprite, px, py, screenDirection(pet.facing), col, PET_SCALE);
+  if (!pet.napping) return;
+  const rise = (t * 0.015) % 1;
+  ctx.save();
+  ctx.globalAlpha = 1 - rise;
+  ctx.fillStyle = '#e8f0ff';
+  ctx.font = `600 9px ${BODY_FONT}`;
+  ctx.textAlign = 'center';
+  ctx.fillText('z', px + 6 + rise * 3, py - 14 - rise * 8);
+  ctx.restore();
 }
 
 export function drawPerson(ctx: Ctx, px: number, py: number, look: Look, o: PersonOpts) {

@@ -33,7 +33,7 @@ const savedAudio = localStorage.getItem('dropceiling.audio');
 if (savedAudio) Object.assign(audio.volume, JSON.parse(savedAudio));
 
 function makeDemo() {
-  const s = newGame('Demo', 'normal', 2004);
+  const s = newGame({ name: 'Demo' }, 'normal', 2004);
   s.modals = [];
   s.cash = 1e6;
   s.time = 14 * 60;

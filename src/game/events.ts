@@ -268,9 +268,9 @@ const RANDOM_EVENTS: { key: string; weight: number; when: (s: GameState, hour: n
     weight: 1.2,
     when: (s, h) => h === 22 && !s.gary.replaced,
     run: (s) => {
-      s.flags.garyAsleepUntil = s.time + 4 * 60 + 60 * 2;
+      s.flags.garyNapFrom = s.time + 60;
+      s.flags.garyAsleepUntil = s.time + 6 * 60;
       log(s, 'Gary brought a pillow tonight. Expect him to nod off in the Security Office around midnight.', 'good');
-      for (const n of s.npcs) if (n.isGary) n.state = 'asleep';
     },
   },
   {

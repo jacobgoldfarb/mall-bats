@@ -1,4 +1,4 @@
-import { BUILD, canRotate, type BuildId, type JobId } from '../game/defs';
+import { BUILD, COSTUMES, canRotate, type BuildId, type JobId } from '../game/defs';
 import { C_AC, C_DUCT, C_OPEN, C_SKYLIGHT, E_GATE, E_GLASS, E_OPEN, E_PUBLIC, E_STAFF, H, LAYOUT, N, W, idx, inBounds, type RoomDef } from '../game/layout';
 import { hash2 } from '../game/rng';
 import { guardCone } from '../game/npc';
@@ -8,7 +8,7 @@ import { dayOf, minuteOfDay, phaseAt } from '../game/time';
 import { forecastInspection, forecastLabel } from '../game/inspect';
 import { CAMERA_FOV, CAMERA_RANGE, boundariesSignal, cameraAngle, canPlace, sightPolygon } from '../game/world';
 import { popupName } from '../game/sim';
-import { BODY_FONT, DISPLAY_FONT, bubble, box, diamondPath, drawPerson, faceQuad, isoText, roundRect, type Ctx, type WorkMotion } from './draw';
+import { BODY_FONT, DISPLAY_FONT, bubble, box, diamondPath, drawPerson, drawPet, faceQuad, isoText, roundRect, type Ctx, type WorkMotion } from './draw';
 import { TH, TW, isoX, isoY, mix, screenToWorld, shade, type Camera } from './iso';
 import { drawBuildable, drawFixture, drawFloorSleeper, sleeperSprite } from './objects';
 import { characterIds, drawPropSprite, texture, type Texture } from './sprites';
@@ -634,6 +634,8 @@ export class Renderer {
       if (c.layer !== layer || c.state === 'away') continue;
       items.push({ depth: c.x + c.y, order: 4, fn: () => this.drawCrew(ctx, s, c, t) });
     }
+    const pet = s.pet;
+    if (pet && s.flags.ferret && pet.layer === layer) items.push({ depth: pet.x + pet.y, order: 3, fn: () => drawPet(ctx, pet, isoX(pet.x, pet.y), isoY(pet.x, pet.y), t) });
   }
 
   private facingScreen(a: { facing: number }) {
@@ -678,7 +680,7 @@ export class Renderer {
       t: t + c.id * 5,
       facingScreen: this.facingScreen(c),
       facing: c.facing,
-      sprite: crewSprite(c.archetype),
+      sprite: crewSprite(c),
       crouch: c.hiding || (c.layer === 1 && !c.moving && !sleeping),
       sleeping,
       alpha: c.hiding ? 0.75 : 1,
@@ -1374,7 +1376,7 @@ export function dragDeckError(s: GameState, x: number, y: number): string | null
 const bedUnder = (s: GameState, c: Crew) => s.objects.find((o) => o.id === c.bedId && o.x === Math.floor(c.x) && o.y === Math.floor(c.y));
 const sleepersIn = (s: GameState, bed: Placed) => s.crew.filter((c) => c.state === 'sleeping' && c.layer === 1 && bedUnder(s, c) === bed).length;
 
-export const crewSprite = (archetype: string) => `char.crew.${archetype}`;
+export const crewSprite = (c: Pick<Crew, 'archetype' | 'sprite' | 'costume'>) => (c.costume && COSTUMES[c.costume.id].sprite) || c.sprite || `char.crew.${c.archetype}`;
 
 function npcSprite(n: Npc): string {
   if (n.kind !== 'shopper') return `char.npc.${n.kind}`;

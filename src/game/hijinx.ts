@@ -1,9 +1,10 @@
-import { LAYOUT } from './layout';
+import type { CostumeId } from './defs';
+import { LAYOUT, N, W } from './layout';
 import { addMood, stat } from './needs';
 import { earn, log, pa, pushModal, rand, raiseSuspicion, sfx } from './ops';
 import type { Crew, GameState } from './state';
 import { dayOf, mallHours } from './time';
-import { getDerived } from './world';
+import { addObject, canPlace, getDerived } from './world';
 
 type Stat = 'stealth' | 'charm' | 'handy';
 
@@ -37,8 +38,71 @@ function complain(s: GameState, roomId: string, amount: number) {
   rs.complaint = Math.max(0, rs.complaint + amount);
 }
 
-const good = (s: GameState, text: string) => (log(s, text, 'good'), sfx('good'));
+type Focus = { x: number; y: number; layer: 0 | 1 };
+
+const good = (s: GameState, text: string, focus?: Focus) => (log(s, text, 'good', focus), sfx('good'));
 const bad = (s: GameState, text: string) => log(s, text, 'warn');
+
+const WALLET_GOODWILL = 8;
+const MALLWALKER_DAYS = 7;
+const HOTDOG_DAYS = 3;
+const OFFERING_FOOD = 2;
+const OFFERING_DAYS = 5;
+
+function wear(s: GameState, c: Crew, id: CostumeId, days: number) {
+  c.costume = { id, until: s.time + days * 1440 };
+}
+
+function hotdogSpot(s: GameState): { x: number; y: number } | null {
+  const anchor = getDerived(s).beds[0]?.obj ?? LAYOUT.hatch;
+  let best: { x: number; y: number } | null = null;
+  let bestD = Infinity;
+  for (let i = 0; i < N; i++) {
+    if (!s.deck[i]) continue;
+    const x = i % W;
+    const y = Math.floor(i / W);
+    const d = Math.hypot(x - anchor.x, y - anchor.y);
+    if (d < bestD && !canPlace(s, 'hotdog', x, y)) {
+      best = { x, y };
+      bestD = d;
+    }
+  }
+  return best;
+}
+
+function hangHotdog(s: GameState): Focus | null {
+  const spot = hotdogSpot(s);
+  if (!spot) return null;
+  addObject(s, 'hotdog', spot.x, spot.y);
+  return { ...spot, layer: 1 };
+}
+
+export function costumesWearOff(s: GameState) {
+  for (const c of s.crew) {
+    if (!c.costume || c.costume.until > s.time) continue;
+    const { id } = c.costume;
+    delete c.costume;
+    if (id === 'mallwalker') {
+      log(s, `${c.name}'s Mallwalkers membership lapsed. Doris took back the visor.`, 'info');
+      continue;
+    }
+    const hung = hangHotdog(s);
+    if (hung) good(s, `${c.name}'s hot dog suit finally split down the seam. The crew hung it from the rafters.`, hung);
+    else log(s, `${c.name}'s hot dog suit finally split down the seam. ${c.name} is a person again.`, 'info');
+  }
+}
+
+export function ventOfferings(s: GameState) {
+  const until = s.flags.ventOfferingsUntil;
+  if (until === undefined) return;
+  if (dayOf(s.time) > until) {
+    delete s.flags.ventOfferingsUntil;
+    log(s, 'No Bagel Bites under the EB Games vent this morning. The kids have moved on to a new god.', 'info');
+    return;
+  }
+  gain(s, { food: OFFERING_FOOD });
+  log(s, `Fresh Bagel Bites under the EB Games vent, left for the Voice of the Ceiling. +${OFFERING_FOOD} food.`, 'good');
+}
 
 const HIJINX: Hijinx[] = [
   {
@@ -53,7 +117,11 @@ const HIJINX: Hijinx[] = [
         run: (s) => {
           raiseSuspicion(s, -3, 'good deed');
           addMood(s, 4);
-          good(s, 'Turned in the wallet. Gary was touched. Things feel a bit lighter.');
+          if (s.gary.replaced) good(s, 'Turned in the wallet. Things feel a bit lighter.');
+          else {
+            s.gary.affinity = Math.min(100, s.gary.affinity + WALLET_GOODWILL);
+            good(s, `Turned in the wallet. Gary was touched. Gary's goodwill: ${s.gary.affinity.toFixed(0)}/100.`);
+          }
         },
       },
     ],
@@ -141,7 +209,7 @@ const HIJINX: Hijinx[] = [
           s.flags.ferret = 1;
           gain(s, { parts: -5 });
           addMood(s, 6);
-          good(s, 'Bandit lives here now. He sleeps in a Pringles can. Every so often he drags something shiny back from the vents.');
+          good(s, 'Bandit lives here now. He sleeps in a Pringles can. Every morning he drags a snack back from the vents.');
         },
       },
       {
@@ -174,7 +242,7 @@ const HIJINX: Hijinx[] = [
             s.pools.fountain = (s.pools.fountain ?? 0) + 30;
             good(s, 'The Ace of Cups. "Wealth... from water." There is $30 more than usual in the fountain tonight.');
           } else {
-            earn(s, 20);
+            s.cash += 20;
             addMood(s, -2);
             bad(s, 'The Tower card. Madame Zelda refunds you out of pity and gives you a crystal "for the road."');
           }
@@ -222,6 +290,7 @@ const HIJINX: Hijinx[] = [
         run: (s, c) => {
           s.cash -= 10;
           c.heat = Math.max(0, c.heat - 40);
+          wear(s, c, 'mallwalker', MALLWALKER_DAYS);
           good(s, `${c.name} got a visor, a pedometer, and a laminated membership card. Nobody looks twice at a mallwalker.`);
         },
       },
@@ -238,7 +307,8 @@ const HIJINX: Hijinx[] = [
         label: () => 'Speak as the Voice of the Ceiling',
         run: (s, c) => {
           if (passes(s, c, 'charm')) {
-            gain(s, { food: 6 });
+            gain(s, { food: OFFERING_FOOD });
+            s.flags.ventOfferingsUntil = dayOf(s.time) + OFFERING_DAYS;
             good(s, 'The kids of EB Games now leave offerings of Bagel Bites under the vent. The Voice of the Ceiling is pleased.');
           } else {
             complain(s, 'ebgamez', 35);
@@ -268,7 +338,8 @@ const HIJINX: Hijinx[] = [
           const tips = rand.int(10, 30);
           c.heat = 0;
           earn(s, tips);
-          good(s, `Nobody recognizes a hot dog. ${c.name} posed for photos with toddlers all afternoon and made $${tips}.`);
+          wear(s, c, 'hotdog', HOTDOG_DAYS);
+          good(s, `Nobody recognizes a hot dog. ${c.name} posed for photos with toddlers all afternoon and made $${tips}. The suit is staying on.`);
         },
       },
       {
@@ -280,9 +351,10 @@ const HIJINX: Hijinx[] = [
       },
       {
         label: () => 'Hang it in the ceiling',
+        disabled: (s) => (s.objects.some((o) => o.type === 'hotdog') ? 'One hot dog is enough' : !hotdogSpot(s) ? 'No free plywood' : undefined),
         run: (s) => {
-          addMood(s, 8);
-          good(s, 'The hot dog hangs from the rafters now. It watches over the crew. They salute it before bed.');
+          const at = hangHotdog(s)!;
+          good(s, 'The hot dog hangs from the rafters now. It watches over the crew. They salute it before bed.', at);
         },
       },
     ],
@@ -371,14 +443,3 @@ export function resolveHijinx(s: GameState, key: string, choice: number, crewId:
   if (c) HIJINX_BY_KEY[key].choices[choice].run(s, c);
 }
 
-export function ferretForage(s: GameState) {
-  if (!s.flags.ferret) return;
-  if (rand.chance(0.25)) {
-    gain(s, { parts: 5 });
-    log(s, 'Bandit dragged a Source power adapter back through the vents. +5 parts.', 'good');
-  } else {
-    const change = rand.int(3, 12);
-    earn(s, change);
-    log(s, `Bandit stashed $${change} in vent change under ${rand.pick(['the futon', 'a pizza box', 'your pillow', 'the hot plate'])}.`, 'good');
-  }
-}

@@ -1,8 +1,8 @@
-import { ARCHETYPES, BUILD, FIRST_NAMES, JOB, JOBS, LOT, NOOK_SLEEP_SPEED, NOOK_TINKER_SPEED, type JobDef, type JobId } from './defs';
+import { ARCHETYPES, BUILD, COSTUMES, FIRST_NAMES, JOB, JOBS, LOT, NOOK_SLEEP_SPEED, NOOK_TINKER_SPEED, type JobDef, type JobId } from './defs';
 import { LAYOUT, N, W, idx, inBounds } from './layout';
 import { addSharedMood, stat, workMult } from './needs';
 import { earn, levelOf, log, pressure, rand, raiseSuspicion, sfx, unlock } from './ops';
-import type { Agent, Candidate, Carry, Crew, GameState, Look, Npc, Placed } from './state';
+import type { Candidate, Carry, Crew, GameState, Look, Mover, Npc, Placed } from './state';
 import { dayOf, phaseAt, seasonFactor, hourCurve, minuteOfDay, md } from './time';
 import { ACCESS_CREW, besideTiles, blocksWalking, cameraWatching, crewDanger, findPath, getDerived, lineOfSight, markDirty, nodeOf, smoothCeilingPath } from './world';
 
@@ -66,6 +66,7 @@ export function addCrew(s: GameState, c: Candidate, at?: { x: number; y: number;
     climb: 0,
     name: c.name,
     archetype: c.archetype,
+    sprite: c.sprite,
     title: arch.title,
     bio: c.bio,
     stealth: c.stealth,
@@ -105,6 +106,8 @@ export function addCrew(s: GameState, c: Candidate, at?: { x: number; y: number;
 
 export const has = (c: Crew, t: string) => c.traits.includes(t as never);
 
+export const costumeOf = (c: Crew) => (c.costume ? COSTUMES[c.costume.id] : null);
+
 export function crewSpeed(c: Crew): number {
   return 0.34 * (has(c, 'quick') ? 1.25 : 1) * (c.energy < 15 ? 0.75 : 1);
 }
@@ -113,7 +116,7 @@ export function bedCapacity(s: GameState): number {
   return getDerived(s).beds.reduce((a, b) => a + b.slots, 0);
 }
 
-export function moveAgent(a: Agent, speed: number, dt: number): boolean {
+export function moveAgent(a: Mover, speed: number, dt: number): boolean {
   let remaining = dt;
   a.moving = false;
   if (a.climb > 0) {
@@ -154,9 +157,9 @@ export function moveAgent(a: Agent, speed: number, dt: number): boolean {
   return a.pathI >= a.path.length;
 }
 
-export const agentNode = (a: Agent) => nodeOf(a.layer, Math.floor(a.x), Math.floor(a.y));
+export const agentNode = (a: Mover) => nodeOf(a.layer, Math.floor(a.x), Math.floor(a.y));
 
-export function goTo(s: GameState, a: Agent, goals: number[] | ((n: number) => boolean), access = ACCESS_CREW): boolean {
+export function goTo(s: GameState, a: Mover, goals: number[] | ((n: number) => boolean), access = ACCESS_CREW): boolean {
   const path = findPath(s, agentNode(a), goals, access);
   if (!path) return false;
   a.path = smoothCeilingPath(s, path);
@@ -441,7 +444,7 @@ function doCycle(s: GameState, c: Crew, job: JobId): boolean {
       return false;
     }
     case 'busk': {
-      const got = Math.round((1 + stat(s, c, 'charm')) * Math.min(1.6, crowd) * (has(c, 'performer') ? 1.6 : 1) * rand.range(0.6, 1.4));
+      const got = Math.round((1 + stat(s, c, 'charm')) * Math.min(1.6, crowd) * (has(c, 'performer') ? 1.6 : 1) * (costumeOf(c)?.busk ?? 1) * rand.range(0.6, 1.4));
       k.cash += got;
       if (got) c.bubble = { text: `+$${got}`, until: s.time + 8, tone: 'happy' };
       return true;
@@ -638,7 +641,8 @@ function startSleep(s: GameState, c: Crew) {
   const target = bed ?? randomDeck(s, LAYOUT.hatch);
   if (target !== null && goTo(s, c, [target])) {
     c.state = 'toBed';
-    setThought(c, bed ? 'Going to bed' : 'No bed. Sleeping on plywood');
+    const salute = s.objects.some((o) => o.type === 'hotdog') ? 'Saluting the hot dog. ' : '';
+    setThought(c, bed ? `${salute}Going to bed` : `${salute}No bed. Sleeping on plywood`);
     return;
   }
   c.state = 'sleeping';
@@ -1083,7 +1087,7 @@ const HEAT_AFTER_ARREST = 40;
 export const HEAT_WARNING = 75;
 
 export function heatTick(s: GameState, c: Crew, rate: number, dt: number) {
-  const mult = has(c, 'invisible') ? 0.1 : 1;
+  const mult = (has(c, 'invisible') ? 0.1 : 1) * (rate > 0 ? (costumeOf(c)?.dayHeat ?? 1) : 1);
   const crackdown = (s.flags.crackdownUntil ?? 0) > s.time ? 2 : 1;
   const halloween = s.flags.costumeDay === dayOf(s.time) ? 0 : 1;
   const before = c.heat;

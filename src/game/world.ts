@@ -44,6 +44,13 @@ export function markDirty() {
   dirty = true;
 }
 
+export function addObject(s: GameState, type: BuildId, x: number, y: number, flipped = false): Placed {
+  const o: Placed = { id: s.nextId++, type, x, y, powered: false, tapRoom: -1, usedUntil: 0, supplyLoad: 0, flipped };
+  s.objects.push(o);
+  markDirty();
+  return o;
+}
+
 export function getDerived(s: GameState): Derived {
   if (!dirty && derived && derivedFor === s) return derived;
   derived = computeDerived(s);
